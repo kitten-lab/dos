@@ -144,6 +144,8 @@ def dispatch(world: World, line: str) -> CommandResult:
             return CommandResult(True, _desc(world, arg))
         if cmd == "text":
             return CommandResult(True, _text_cmd(world, arg))
+        if cmd == "print":
+            return CommandResult(True, _print_cmd(world, arg))
         if cmd == "create":
             return CommandResult(True, _create(world, arg))
         if cmd == "spawn":
@@ -206,6 +208,11 @@ def _presence_code(world: World | None, inst: InstanceView) -> str:
     """Instance short ref (THG-001-0001) for call/disambiguate; falls back to ven code."""
     if world is not None:
         try:
+            if world.is_tdf(inst.id):
+                payload = world.tdf_payload(inst.id) or {}
+                tdf = (payload.get("code") or "").strip()
+                if tdf:
+                    return tdf
             return world.short_ref_of(inst.id)
         except Exception:  # noqa: BLE001
             pass
@@ -223,10 +230,21 @@ def _presence_row(
     Prime = origin VEN name; name = lived title; code = instance short ref
     (includes VEN code + instance digits) so take/examine can target uniquely.
     No kind/subtype columns — less noise; call by code when names get iffy.
+    TDFs show subtype as prime chip and TDF-######## as code.
     """
     name = display_name(inst.name or "")
     kind = (inst.ven_kind or "other").strip() or "other"
     prime = display_name(inst.ven_name or "") or "—"
+    if world is not None and world.is_tdf(inst.id):
+        payload = world.tdf_payload(inst.id) or {}
+        sub = (payload.get("subtype") or "").strip()
+        k = (payload.get("kind") or "").strip()
+        if sub and k:
+            prime = f"ticket/{sub}:{k}"
+        elif sub:
+            prime = f"ticket/{sub}"
+        else:
+            prime = "ticket"
     code = _presence_code(world, inst)
     return prime, name, code, kind
 
@@ -2025,6 +2043,23 @@ def _examine(world: World, arg: str, *, deep: bool | None = None) -> str:
     context = _instance_context_line(world, thing)
     head = fmt.join_blocks(header, context, gap=0)
     body = fmt.prose(thing.description)
+    tdf_meta = None
+    if world.is_tdf(thing.id):
+        payload = world.tdf_payload(thing.id) or {}
+        data = payload.get("data") or {}
+        code = payload.get("code") or "?"
+        sub = payload.get("subtype") or ""
+        k = payload.get("kind") or ""
+        start = (data.get("start") or "").strip()
+        end = (data.get("end") or "").strip()
+        if start and end:
+            data_line = f"{start} → {end}"
+        else:
+            data_line = (data.get("raw") or data.get("when") or "").strip()
+        tdf_meta = fmt.hint(
+            f"TDF {code}  ·  ticket/{sub or '—'}  ·  kind {k or '—'}"
+            + (f"  ·  {data_line}" if data_line else "")
+        )
     book_meta = None
     if _is_folio_kind(thing.ven_kind):
         from .book import format_status_markup
@@ -2104,6 +2139,7 @@ def _examine(world: World, arg: str, *, deep: bool | None = None) -> str:
     return fmt.join_blocks(
         head,
         body,
+        tdf_meta,
         book_meta,
         portal_meta,
         lineage_block,
@@ -5400,6 +5436,142 @@ def _parse_create_of(
             name_side = maybe_name
             parent_query = maybe_parent
     return name_side, desc, parent_query
+
+
+def _print_usage() -> str:
+    return (
+        "Usage:\n"
+        "  print ticket -t date -k range -n Global Release Date "
+        "-d Jan 20 - Feb 15 2026\n"
+        "\n"
+        "Prints a Temporary Data Fragment (TDF) — a movable ticket slip.\n"
+        "  -t / --subtype   ticket subtype (date for calendars; also label, note)\n"
+        "  -k / --kind      range | due | state | point\n"
+        "  -n / --name      title on the slip\n"
+        "  -d / --desc      body / date range text (bare - in ranges is ok)\n"
+        "\n"
+        "Slips land in the current place; take / put / look work like other things.\n"
+        "Id shape: TDF-######## (not a full VEN prime per slip)."
+    )
+
+
+def _print_cmd(world: World, arg: str) -> str:
+    """print ticket … — receipt-style TDF slips for offices/calendars."""
+    raw = (arg or "").strip()
+    if not raw:
+        return fmt.hint(_print_usage())
+    parts = raw.split(maxsplit=1)
+    what = parts[0].lower()
+    rest = parts[1] if len(parts) > 1 else ""
+    if what in ("ticket", "tdf", "slip", "tag"):
+        return _print_ticket(world, rest)
+    return fmt.hint(
+        f"Unknown print target {what!r}.\n" + _print_usage()
+    )
+
+
+# print ticket flags: -t is subtype (date), not create's type
+_PRINT_TICKET_FLAG_ALIASES: dict[str, str] = {
+    "t": "subtype",
+    "subtype": "subtype",
+    "type": "subtype",
+    "k": "kind",
+    "kind": "kind",
+    "n": "name",
+    "name": "name",
+    "title": "name",
+    "d": "desc",
+    "desc": "desc",
+    "description": "desc",
+    "body": "desc",
+    "b": "desc",
+}
+
+
+def _print_ticket(world: World, arg: str) -> str:
+    from .argflags import parse_named_flags
+    from .tdf import TICKET_KINDS, TICKET_SUBTYPES
+
+    arg = (arg or "").strip()
+    if not arg:
+        return fmt.hint(_print_usage())
+
+    parsed = parse_named_flags(arg, aliases=_PRINT_TICKET_FLAG_ALIASES)
+    if parsed.error:
+        return fmt.err(parsed.error)
+
+    subtype = parsed.get("subtype") or "date"
+    kind = parsed.get("kind") or "range"
+    name = parsed.get("name")
+    desc = parsed.get("desc")
+
+    # Recover range text after bare "-" tokens (shlex splits them out of -d)
+    if parsed.positionals:
+        extra = " ".join(parsed.positionals)
+        if desc:
+            desc = f"{desc} {extra}".strip()
+        elif not name and len(parsed.positionals) >= 1:
+            # no -n: treat leading positionals as name if we still need one
+            name = extra
+        else:
+            desc = (desc + " " + extra).strip() if desc else extra
+
+    if not name:
+        return fmt.hint(
+            "print ticket needs -n / --name\n" + _print_usage()
+        )
+
+    subtype_l = subtype.lower().strip()
+    kind_l = kind.lower().strip()
+    # Soft allow unknown subtypes/kinds (office vocabulary will grow)
+    if subtype_l not in TICKET_SUBTYPES and subtype_l:
+        pass  # allow custom
+    if kind_l not in TICKET_KINDS and kind_l:
+        pass
+
+    try:
+        inst_id, code = world.print_ticket(
+            name=name,
+            subtype=subtype_l,
+            kind=kind_l,
+            description=desc or "",
+        )
+    except ValueError as e:
+        return fmt.err(str(e))
+
+    inst = world.get_instance(inst_id)
+    assert inst is not None
+    payload = world.tdf_payload(inst_id) or {}
+    data = payload.get("data") or {}
+    start = (data.get("start") or "").strip()
+    end = (data.get("end") or "").strip()
+    range_bit = ""
+    if start and end:
+        range_bit = f"{start} → {end}"
+    elif start:
+        range_bit = start
+    elif data.get("raw"):
+        range_bit = str(data.get("raw"))
+
+    world.undo_stack.push(
+        f"print ticket {code}",
+        lambda w, iid=inst_id: w.delete_instance(iid),
+    )
+
+    lines = [
+        fmt.ok(f"Printed ticket · {inst.name}"),
+        fmt.hint(
+            f"  {code}  ·  type ticket  ·  subtype {subtype_l}  ·  kind {kind_l}"
+        ),
+    ]
+    if range_bit:
+        lines.append(fmt.hint(f"  data  {range_bit}"))
+    lines.append(
+        fmt.hint(
+            f"  TDF slip in place — take / put / examine {code}  ·  examine {inst.name}"
+        )
+    )
+    return fmt.join_blocks(*lines, gap=0)
 
 
 def _create_usage() -> str:

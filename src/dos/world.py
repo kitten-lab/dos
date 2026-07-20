@@ -17,10 +17,12 @@ from .ids import (
     kind_code_prefix,
     names_match,
     new_id,
+    new_tdf_code,
     normalize_formal_name,
     normalize_instance_title,
     parse_instance_ref_token,
     parse_resolve_query,
+    parse_tdf_code,
     parse_ven_code,
     slugify,
 )
@@ -37,6 +39,7 @@ KINDS = (
     "symbol",
     "sense",
     "event",
+    "ticket",  # TDF slips (print ticket) — movable, not prime-catalog furniture
     "realm",
     "timeline",
 )
@@ -69,8 +72,26 @@ KIND_ALIASES: dict[str, str] = {
 
 # Author subtypes welcome on all adventure roots (not only a “feeling group”)
 SUBTYPE_KINDS = frozenset(
-    {"person", "place", "bin", "thing", "folio", "symbol", "sense", "event"}
+    {
+        "person",
+        "place",
+        "bin",
+        "thing",
+        "folio",
+        "symbol",
+        "sense",
+        "event",
+        "ticket",
+    }
 )
+
+# Instance state keys for Temporary Data Fragments (printed tickets)
+TDF_STATE_KEY = "tdf"
+TDF_CODE_KEY = "tdf_code"
+TDF_TYPE_KEY = "tdf_type"  # ticket
+TDF_SUBTYPE_KEY = "tdf_subtype"  # date, …
+TDF_KIND_KEY = "tdf_kind"  # range, due, state, …
+TDF_DATA_KEY = "tdf_data"  # payload dict (range start/end, …)
 
 # Back-compat name used in a few create/help strings
 FEELING_GROUP_KINDS = frozenset({"sense"})
@@ -422,6 +443,145 @@ class World:
         )
         self.conn.commit()
         return inst_id
+
+    # ── Temporary Data Fragments (printed tickets) ───────────────────────
+
+    def ensure_ticket_prime(self) -> str:
+        """
+        Shared Ticket prime for all TDF slips (one prime, many instances).
+
+        Slips are not catalogued as separate VEN primes — only as movable
+        instances with TDF-… codes in state_json.
+        """
+        existing = self.find_ven("Ticket")
+        if existing is not None and (existing.kind or "").lower() == "ticket":
+            return existing.id
+        # Prefer code-stable prime named Ticket
+        for v in self.list_vens():
+            if (v.kind or "").lower() == "ticket" and names_match("Ticket", v.name):
+                return v.id
+        return self.create_ven(
+            "Ticket",
+            "ticket",
+            description=(
+                "Temporary Data Fragment template — slips of paper printed into "
+                "the office (dates, dues, labels). Not a full VEN catalog entry "
+                "per slip; each print is a TDF instance."
+            ),
+            tags=["tdf", "ticket", "office"],
+            meta={"subtype": "template"},
+        )
+
+    def tdf_codes_taken(self) -> set[str]:
+        """All TDF codes currently stored on instances."""
+        taken: set[str] = set()
+        rows = self.conn.execute("SELECT state_json FROM instances").fetchall()
+        for r in rows:
+            st = json.loads(r["state_json"] or "{}")
+            code = parse_tdf_code(str(st.get(TDF_CODE_KEY) or ""))
+            if code:
+                taken.add(code)
+        return taken
+
+    def mint_tdf_code(self) -> str:
+        """Unique TDF-######## for a new slip."""
+        taken = self.tdf_codes_taken()
+        for _ in range(64):
+            code = new_tdf_code()
+            if code not in taken:
+                return code
+        # Extremely unlikely collision storm
+        return new_tdf_code()
+
+    def is_tdf(self, instance_id: str) -> bool:
+        st = self.instance_state(instance_id)
+        return bool(st.get(TDF_STATE_KEY)) or bool(
+            parse_tdf_code(str(st.get(TDF_CODE_KEY) or ""))
+        )
+
+    def tdf_payload(self, instance_id: str) -> dict[str, Any] | None:
+        """Return TDF fields from instance state, or None if not a TDF."""
+        st = self.instance_state(instance_id)
+        if not st.get(TDF_STATE_KEY) and not st.get(TDF_CODE_KEY):
+            return None
+        return {
+            "code": st.get(TDF_CODE_KEY),
+            "type": st.get(TDF_TYPE_KEY) or "ticket",
+            "subtype": st.get(TDF_SUBTYPE_KEY) or "",
+            "kind": st.get(TDF_KIND_KEY) or "",
+            "data": dict(st.get(TDF_DATA_KEY) or {}),
+        }
+
+    def find_instance_by_tdf_code(self, raw: str) -> InstanceView | None:
+        code = parse_tdf_code(raw)
+        if not code:
+            return None
+        rows = self.conn.execute("SELECT id, state_json FROM instances").fetchall()
+        for r in rows:
+            st = json.loads(r["state_json"] or "{}")
+            if parse_tdf_code(str(st.get(TDF_CODE_KEY) or "")) == code:
+                return self.get_instance(r["id"])
+        return None
+
+    def print_ticket(
+        self,
+        *,
+        name: str,
+        subtype: str,
+        kind: str,
+        description: str = "",
+        data: dict[str, Any] | None = None,
+        into_instance_id: str | None = None,
+    ) -> tuple[str, str]:
+        """
+        Print a ticket TDF into *into_instance_id* (default: current place).
+
+        Returns (instance_id, tdf_code).
+        """
+        from .tdf import build_ticket_description, normalize_ticket_data
+
+        loc = self.player_location()
+        dest = into_instance_id
+        if not dest:
+            if not loc:
+                raise ValueError("Nowhere to print — dig or go somewhere first.")
+            dest = loc.id
+
+        subtype_n = (subtype or "").strip().lower() or "date"
+        kind_n = (kind or "").strip().lower() or "range"
+        title = normalize_instance_title(name)
+        payload = normalize_ticket_data(subtype_n, kind_n, description, data)
+        desc = (description or "").strip() or build_ticket_description(
+            subtype_n, kind_n, payload
+        )
+        code = self.mint_tdf_code()
+        prime = self.ensure_ticket_prime()
+        # Align realm/timeline with destination when possible
+        dest_inst = self.get_instance(dest)
+        realm_id = dest_inst.realm_instance_id if dest_inst else None
+        timeline_id = dest_inst.timeline_instance_id if dest_inst else None
+        if loc and not realm_id:
+            realm_id = loc.realm_instance_id
+            timeline_id = loc.timeline_instance_id
+
+        st = {
+            TDF_STATE_KEY: True,
+            TDF_CODE_KEY: code,
+            TDF_TYPE_KEY: "ticket",
+            TDF_SUBTYPE_KEY: subtype_n,
+            TDF_KIND_KEY: kind_n,
+            TDF_DATA_KEY: payload,
+        }
+        inst_id = self.instantiate(
+            prime,
+            name_override=title,
+            description_override=desc,
+            realm_instance_id=realm_id,
+            timeline_instance_id=timeline_id,
+            state=st,
+        )
+        self.put_in(inst_id, dest, slot="interior")
+        return inst_id, code
 
     def _short_ref_digits_taken(self, ven_id: str) -> set[str]:
         """All short_ref digit parts already used by instances of this prime."""
@@ -2071,6 +2231,7 @@ class World:
         "bin",  # bags / furniture you can pick up (not place-scale by default)
         "sense",
         "symbol",
+        "ticket",  # TDF slips
         # legacy kinds if any linger
         "container",
         "object",
@@ -2656,6 +2817,19 @@ class World:
         kind: str | None = None,
     ) -> list[InstanceView]:
         """All reachable matches for a query (may be empty or many)."""
+        # TDF codes before VEN short-ref parsing (TDF-######## looks like a ref)
+        tdf_direct = parse_tdf_code((name or "").strip().lstrip("#"))
+        if tdf_direct:
+            candidates = self.resolve_here_candidates()
+            if kind:
+                candidates = [c for c in candidates if c.ven_kind == kind]
+            return [
+                c
+                for c in candidates
+                if parse_tdf_code(str((c.state or {}).get(TDF_CODE_KEY) or ""))
+                == tdf_direct
+            ]
+
         base, where, ref = parse_resolve_query(name)
         candidates = self.resolve_here_candidates()
         if kind:
@@ -2696,6 +2870,17 @@ class World:
 
         if not base:
             return []
+
+        # TDF codes (printed tickets): TDF-48291037
+        tdf = parse_tdf_code(base)
+        if tdf:
+            by_tdf = [
+                c
+                for c in candidates
+                if parse_tdf_code(str((c.state or {}).get(TDF_CODE_KEY) or "")) == tdf
+            ]
+            if by_tdf:
+                return by_tdf
 
         # Whole base is a composite short ref (e.g. FIELD-NOTES-0001)
         maybe_ref = parse_instance_ref_token(base)

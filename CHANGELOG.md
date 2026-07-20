@@ -7,6 +7,13 @@ Format: dated bullets, one line each — what landed, not a full story.
 
 ---
 
+## 2026-07-20 — print ticket (TDF)
+
+- **`print ticket`**: Temporary Data Fragments — movable slips (not a new VEN prime per slip)
+- Flags: `-t` subtype (date), `-k` kind (range/due/…), `-n` name, `-d` body/range text
+- Codes: `TDF-########`; one shared Ticket prime; take/put/examine by name or code
+- Example: `print ticket -t date -k range -n Global Release Date -d Jan 20 - Feb 15 2026`
+
 ## 2026-07-20 — Digital Office Spaces (product branch)
 
 - **Fork baseline:** clean copy of world-studio engine into `dos` with **new git history** (no parent commit graph)

@@ -28,6 +28,7 @@ KIND_CODE_PREFIX: dict[str, str] = {
     "event": "EVT",
     "realm": "RLM",
     "timeline": "TLN",
+    "ticket": "TKT",  # shared Ticket prime only; slips use TDF-… codes
     # legacy (read/compat; create folds these away)
     "container": "CTR",  # old store-root codes still parse
     "object": "OBJ",
@@ -119,6 +120,46 @@ def parse_history_event_code(raw: str | None) -> str | None:
 
 def is_ven_code(raw: str | None) -> bool:
     return parse_ven_code(raw) is not None
+
+
+# Temporary Data Fragment codes: TDF-48291037 (not VEN primes)
+_TDF_CODE_RE = re.compile(r"^TDF-(\d{4,12})$", re.IGNORECASE)
+
+
+def format_tdf_code(n: int) -> str:
+    """TDF-NNNNNNNN (8 digits when possible)."""
+    if n < 0:
+        n = 0
+    if n <= 99_999_999:
+        return f"TDF-{n:08d}"
+    return f"TDF-{n}"
+
+
+def parse_tdf_code(raw: str | None) -> str | None:
+    """Normalize TDF-… codes; accepts tdf-123, TDF 12345678."""
+    if raw is None:
+        return None
+    s = normalize_ref_separators(raw)
+    if not s:
+        return None
+    m = _TDF_CODE_RE.fullmatch(s)
+    if m:
+        return format_tdf_code(int(m.group(1)))
+    m2 = re.fullmatch(r"TDF(\d{4,12})", s)
+    if m2:
+        return format_tdf_code(int(m2.group(1)))
+    return None
+
+
+def is_tdf_code(raw: str | None) -> bool:
+    return parse_tdf_code(raw) is not None
+
+
+def new_tdf_code() -> str:
+    """Random TDF code for a printed slip (expand later for origin stamps)."""
+    import secrets
+
+    return format_tdf_code(secrets.randbelow(100_000_000))
 
 
 def new_id(prefix: str = "") -> str:
