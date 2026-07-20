@@ -22,17 +22,23 @@ from .world import World
 DEFAULT_WORLD = Path(__file__).resolve().parents[2] / "worlds" / "seed.world.db"
 console = Console(highlight=False)
 
-# TUI chrome (exported for tests) — darker surfaces, sharp solid borders, wide help
+# TUI chrome (exported for tests) — classic DOS blue terminal
 TUI_HELP_PANE_WIDTH = 56
 TUI_HELP_PANE_MIN_WIDTH = 48
 TUI_HELP_PANE_MAX_WIDTH = 72
 # Book reader is a soft full-width modal (phase 2); no side-rail width tokens
-TUI_BG = "#0a0a0c"
-TUI_SURFACE = "#0e0e12"
-TUI_PANEL = "#121218"
-TUI_BORDER = "#3d3d48"
-TUI_BORDER_ACCENT = "#5ec8d8"
-TUI_INPUT_BG = "#0c0c10"
+# CGA-ish blue screen: deep blue field, cyan borders, light gray text
+TUI_BG = "#0000aa"
+TUI_SURFACE = "#0000aa"
+TUI_PANEL = "#0000bb"
+TUI_BORDER = "#5555ff"
+TUI_BORDER_ACCENT = "#55ffff"
+TUI_INPUT_BG = "#000066"
+TUI_TEXT = "#aaaaaa"
+TUI_TEXT_BRIGHT = "#ffffff"
+TUI_MUTED = "#5555aa"
+TUI_LOGO_FG = "#ffffff"
+TUI_LOGO_BG = "#0000ff"
 
 
 def ensure_world(path: Path, reseed: bool = False, seed: str = "office") -> World:
@@ -314,8 +320,8 @@ def _world_chrome_label(world_path: Path) -> str:
 
 
 def _dos_logo_markup() -> str:
-    """Cute header badge: white DOS on cyan pill."""
-    return "[bold white on #5ec8d8] DOS [/]"
+    """Cute header badge: white DOS on bright blue pill (classic DOS chrome)."""
+    return f"[bold {TUI_LOGO_FG} on {TUI_LOGO_BG}] DOS [/]"
 
 
 def _studio_boot_banner_markup(world_path: Path, world_name: str) -> str:
@@ -528,7 +534,7 @@ def run_textual(world: World, world_path: Path) -> None:
             if is_openable_url(u):
                 self.open_url(u)
 
-        # Sharp/dark chrome: solid borders, near-black panels, wider help rail
+        # Classic DOS blue: deep blue field, cyan edges, light gray type
         CSS = f"""
         Screen {{
             background: {TUI_BG};
@@ -543,9 +549,9 @@ def run_textual(world: World, world_path: Path) -> None:
             border: solid {TUI_BORDER};
             padding: 1 2;
             background: {TUI_SURFACE};
-            color: #e8e8ec;
+            color: {TUI_TEXT};
             scrollbar-background: {TUI_BG};
-            scrollbar-color: {TUI_BORDER};
+            scrollbar-color: {TUI_BORDER_ACCENT};
         }}
         #help-pane {{
             width: {TUI_HELP_PANE_WIDTH};
@@ -555,7 +561,7 @@ def run_textual(world: World, world_path: Path) -> None:
             border: solid {TUI_BORDER_ACCENT};
             padding: 1 2;
             background: {TUI_PANEL};
-            color: #e8e8ec;
+            color: {TUI_TEXT};
             scrollbar-background: {TUI_BG};
             scrollbar-color: {TUI_BORDER};
         }}
@@ -572,6 +578,7 @@ def run_textual(world: World, world_path: Path) -> None:
             height: auto;
             border-bottom: solid {TUI_BORDER};
             margin-bottom: 1;
+            color: {TUI_TEXT_BRIGHT};
         }}
         #help-pane-scroll {{
             height: 1fr;
@@ -580,13 +587,14 @@ def run_textual(world: World, world_path: Path) -> None:
         #help-pane-body {{
             height: auto;
             background: {TUI_PANEL};
+            color: {TUI_TEXT};
         }}
         #cmd {{
             dock: bottom;
             margin: 0 0;
             border: solid {TUI_BORDER_ACCENT};
             background: {TUI_INPUT_BG};
-            color: #e8e8ec;
+            color: {TUI_TEXT_BRIGHT};
             padding: 0 1;
         }}
         #studio-header {{
@@ -600,29 +608,29 @@ def run_textual(world: World, world_path: Path) -> None:
         #header-left, #header-center, #header-right {{
             height: 3;
             content-align: center middle;
-            color: #c8c8d0;
+            color: {TUI_TEXT};
         }}
         #header-left {{
             width: auto;
             min-width: 7;
             content-align: left middle;
-            color: #e8e8ec;
+            color: {TUI_TEXT_BRIGHT};
             padding: 0 1 0 0;
         }}
         #header-center {{
             width: 1fr;
             content-align: left middle;
-            color: #888890;
+            color: {TUI_MUTED};
         }}
         #header-right {{
             width: auto;
             min-width: 12;
             content-align: right middle;
-            color: #5ec8d8;
+            color: {TUI_BORDER_ACCENT};
         }}
         Footer {{
             background: {TUI_BG};
-            color: #888890;
+            color: {TUI_MUTED};
             border-top: solid {TUI_BORDER};
         }}
         """
@@ -686,7 +694,7 @@ def run_textual(world: World, world_path: Path) -> None:
         def _refresh_studio_header(self) -> None:
             """
             Persistent top bar:
-              left   DOS logo (white on cyan)
+              left   DOS logo (white on bright blue)
               center (open — no seed chrome)
               right  current location
             """
@@ -700,7 +708,9 @@ def run_textual(world: World, world_path: Path) -> None:
             right = self.query_one("#header-right", Static)
             left.update(_dos_logo_markup())
             center.update("")
-            right.update(f"[dim]@[/dim] {fmt.safe(loc_name)}")
+            right.update(
+                f"[{TUI_MUTED}]@[/] [{TUI_BORDER_ACCENT}]{fmt.safe(loc_name)}[/]"
+            )
 
         def _close_help_only(self) -> None:
             if self.help_pane.open:

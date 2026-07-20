@@ -59,10 +59,23 @@ def make_book_reader_screen(
 
         IS_BOOK_READER = True
 
+        # Match main app classic DOS blue
+        from .cli import (
+            TUI_BG,
+            TUI_BORDER,
+            TUI_BORDER_ACCENT,
+            TUI_INPUT_BG,
+            TUI_MUTED,
+            TUI_PANEL,
+            TUI_SURFACE,
+            TUI_TEXT,
+            TUI_TEXT_BRIGHT,
+        )
+
         CSS = f"""
         BookReaderScreen {{
             align: center middle;
-            background: rgba(10, 10, 12, 0.52);
+            background: rgba(0, 0, 80, 0.72);
         }}
         #book-reader {{
             width: 90%;
@@ -71,61 +84,61 @@ def make_book_reader_screen(
             height: 80%;
             min-height: 22;
             max-height: 92%;
-            background: #0c0c10;
-            border: solid #5ec8d8;
+            background: {TUI_PANEL};
+            border: solid {TUI_BORDER_ACCENT};
             padding: 0 1;
-            color: #e8e8ec;
+            color: {TUI_TEXT};
             layout: vertical;
         }}
         #book-reader-header {{
             height: 3;
             width: 100%;
             padding: 0 1;
-            border-bottom: solid #3d3d48;
-            background: #0c0c10;
+            border-bottom: solid {TUI_BORDER};
+            background: {TUI_PANEL};
             layout: horizontal;
         }}
         #book-reader-left {{
             width: 1fr;
             height: 3;
             content-align: left middle;
-            color: #e8e8ec;
+            color: {TUI_TEXT_BRIGHT};
         }}
         #book-reader-right {{
             width: auto;
             min-width: 22;
             height: 3;
             content-align: right middle;
-            color: #c8c8d0;
+            color: {TUI_BORDER_ACCENT};
             padding-left: 1;
         }}
         #book-reader-scroll {{
             height: 1fr;
             width: 100%;
-            background: #000000;
+            background: {TUI_INPUT_BG};
             /* Equal inset L/R; body column is fixed measure and centered */
             padding: 1 1;
             align: center top;
-            scrollbar-background: #0a0a0c;
-            scrollbar-color: #3d3d48;
+            scrollbar-background: {TUI_BG};
+            scrollbar-color: {TUI_BORDER_ACCENT};
             scrollbar-size-vertical: 1;
         }}
         #book-reader-body {{
             height: auto;
             width: {_BODY_W};
             max-width: 100%;
-            background: #000000;
-            color: #e8e8ec;
+            background: {TUI_INPUT_BG};
+            color: {TUI_TEXT};
             text-align: left;
         }}
         #book-reader-foot {{
             height: 3;
             width: 100%;
             padding: 0 1;
-            border-top: solid #3d3d48;
+            border-top: solid {TUI_BORDER};
             content-align: center middle;
-            color: #888890;
-            background: #0c0c10;
+            color: {TUI_MUTED};
+            background: {TUI_PANEL};
         }}
         """
 

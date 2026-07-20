@@ -27,13 +27,13 @@ from .help_ui import (
     render_numbered_index,
 )
 
-# Simple dark chrome (standalone help TUI — exported for tests)
-HELP_TUI_BG = "#0a0a0c"
-HELP_TUI_SURFACE = "#0e0e12"
-HELP_TUI_PANEL = "#121218"
-HELP_TUI_BORDER = "#3d3d48"
-HELP_TUI_ACCENT = "#5ec8d8"
-HELP_TUI_INPUT_BG = "#0c0c10"
+# Classic DOS blue (standalone help TUI — exported for tests)
+HELP_TUI_BG = "#0000aa"
+HELP_TUI_SURFACE = "#0000aa"
+HELP_TUI_PANEL = "#0000bb"
+HELP_TUI_BORDER = "#5555ff"
+HELP_TUI_ACCENT = "#55ffff"
+HELP_TUI_INPUT_BG = "#000066"
 
 
 def help_text_for_query(query: str = "") -> str:
