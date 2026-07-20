@@ -313,6 +313,11 @@ def _world_chrome_label(world_path: Path) -> str:
     return world_path.name or str(world_path)
 
 
+def _dos_logo_markup() -> str:
+    """Cute header badge: white DOS on cyan pill."""
+    return "[bold white on #5ec8d8] DOS [/]"
+
+
 def _studio_boot_banner_markup(world_path: Path, world_name: str) -> str:
     """Log-only tips after clear/mount (identity lives in the persistent header bar)."""
     _ = world_path, world_name
@@ -322,33 +327,18 @@ def _studio_boot_banner_markup(world_path: Path, world_name: str) -> str:
     )
 
 
-def _seed_label(world_name: str, world_path: Path) -> str:
-    """Starting-seed text for the header left corner."""
-    meta = (world_name or "").strip()
-    file_label = _world_chrome_label(world_path)
-    if meta and meta.casefold() != file_label.casefold():
-        return meta
-    if meta:
-        return meta
-    return "—"
-
-
 def _studio_boot_panel(world_path: Path, world_name: str) -> Panel:
     """Rich panel for plain REPL boot / clear."""
+    _ = world_name
     file_label = _world_chrome_label(world_path)
-    meta = (world_name or "").strip()
-    flavor_line = ""
-    if meta and meta.casefold() != file_label.casefold():
-        flavor_line = f"[dim]Starting Seed:[/dim]  {fmt.safe(meta)}\n"
     return Panel(
-        f"[bold]{PRODUCT_NAME}[/bold]  [dim]|[/dim]  [dim]{fmt.safe(file_label)}[/dim]\n\n"
-        f"{flavor_line}"
+        f"{_dos_logo_markup()}  [dim]{fmt.safe(file_label)}[/dim]\n\n"
         f"[dim]try[/dim]    look · locate self · undo · help · clear\n"
         f"[dim]↑[/dim]       previous commands  ·  "
         f"[dim]tui[/dim]  python -m dos --textual",
         border_style="dim",
         padding=(1, 2),
-        title="[bright_cyan]studio[/bright_cyan]",
+        title="[bright_cyan]dos[/bright_cyan]",
         title_align="left",
     )
 
@@ -613,18 +603,20 @@ def run_textual(world: World, world_path: Path) -> None:
             color: #c8c8d0;
         }}
         #header-left {{
+            width: auto;
+            min-width: 7;
+            content-align: left middle;
+            color: #e8e8ec;
+            padding: 0 1 0 0;
+        }}
+        #header-center {{
             width: 1fr;
             content-align: left middle;
             color: #888890;
         }}
-        #header-center {{
-            width: 2fr;
-            content-align: center middle;
-            text-style: bold;
-            color: #e8e8ec;
-        }}
         #header-right {{
-            width: 1fr;
+            width: auto;
+            min-width: 12;
             content-align: right middle;
             color: #5ec8d8;
         }}
@@ -676,9 +668,9 @@ def run_textual(world: World, world_path: Path) -> None:
 
         def on_mount(self) -> None:
             name = get_meta(world.conn, "world_name", world_path.name) or world_path.name
-            # OS window title stays product + file
+            # OS window chrome — short product slug
             file_label = _world_chrome_label(world_path)
-            self.title = f"{PRODUCT_NAME} | {file_label}"
+            self.title = f"DOS | {file_label}"
             self.sub_title = ""
             self._refresh_studio_header()
             self._refresh_help_pane()
@@ -694,29 +686,20 @@ def run_textual(world: World, world_path: Path) -> None:
         def _refresh_studio_header(self) -> None:
             """
             Persistent top bar:
-              left   Starting Seed
-              center Digital Office Spaces | {world file}
+              left   DOS logo (white on cyan)
+              center (open — no seed chrome)
               right  current location
             """
             from .ids import display_name
 
-            wname = (
-                get_meta(world.conn, "world_name", world_path.name) or world_path.name
-            )
-            file_label = _world_chrome_label(world_path)
-            seed = _seed_label(str(wname), world_path)
             loc = world.player_location()
             loc_name = display_name(loc.name) if loc else "—"
 
             left = self.query_one("#header-left", Static)
             center = self.query_one("#header-center", Static)
             right = self.query_one("#header-right", Static)
-            left.update(
-                f"[dim]Starting Seed[/dim]  {fmt.safe(seed)}"
-            )
-            center.update(
-                f"[bold]{PRODUCT_NAME}[/bold]  [dim]|[/dim]  {fmt.safe(file_label)}"
-            )
+            left.update(_dos_logo_markup())
+            center.update("")
             right.update(f"[dim]@[/dim] {fmt.safe(loc_name)}")
 
         def _close_help_only(self) -> None:
