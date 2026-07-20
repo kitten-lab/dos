@@ -1,0 +1,27 @@
+[project]
+name = "digital-office-spaces"
+version = "0.1.0"
+description = "Digital Office Spaces (DOS) — collaborative office world builder for humans and agents (TUI-first)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "textual>=0.80.0",
+    "rich>=13.0.0",
+    "prompt_toolkit>=3.0.0",
+]
+
+[project.scripts]
+digital-office-spaces = "digital_office_spaces.cli:main"
+digital-office-spaces-help = "digital_office_spaces.help_cli:main"
+dos = "digital_office_spaces.cli:main"
+dos-help = "digital_office_spaces.help_cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+digital_office_spaces = ["schema.sql"]
