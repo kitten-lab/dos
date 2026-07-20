@@ -414,10 +414,9 @@ def _format_presence_line(
         f"{fmt.colored_padded_name(name, color_kind, w_name)}{gap}"
     )
     if w_data > 0:
-        # Ticket contents (range / due) — dim, padded with the shared grid
-        line += (
-            f"[dim]{fmt.safe(fmt.pad_visible(data or '—', w_data))}[/dim]{gap}"
-        )
+        # Ticket contents (range / due) — dim; non-tickets pad blank (no dash noise)
+        cell = data if data else ""
+        line += f"[dim]{fmt.safe(fmt.pad_visible(cell, w_data))}[/dim]{gap}"
     line += f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]"
     if world is not None:
         # Slot only when non-default (feeling, worn, …). interior + inventory
