@@ -251,13 +251,15 @@ def _presence_row(
     """
     Plain columns for ordinary (non-ticket) look / examine lists::
 
-      prime · name · code · color_kind
+      name · prime · code · color_kind
+
+    Instance title first (what you call it), then origin VEN name.
     """
     name = display_name(inst.name or "")
     kind = (inst.ven_kind or "other").strip() or "other"
     prime = display_name(inst.ven_name or "") or "—"
     code = _presence_code(world, inst)
-    return prime, name, code, kind
+    return name, prime, code, kind
 
 
 def _presence_column_widths(
@@ -270,13 +272,13 @@ def _presence_column_widths(
     Widths for ordinary rows and ticket rows.
 
     Returns::
-      w_prime, w_name, w_code,
+      w_name, w_prime, w_code,
       w_t_brick, w_t_code, w_t_name, w_t_data, w_t_sub, w_t_kind
 
     Subtype/kind widths are 0 when unused (column omitted).
     """
-    primes: list[str] = []
     names: list[str] = []
+    primes: list[str] = []
     codes: list[str] = []
     t_bricks: list[str] = []
     t_codes: list[str] = []
@@ -295,9 +297,9 @@ def _presence_column_widths(
             t_subs.append(s)
             t_kinds.append(k)
             return
-        p, n, c, _ = _presence_row(inst, world=world)
-        primes.append(p)
+        n, p, c, _ = _presence_row(inst, world=world)
         names.append(n)
+        primes.append(p)
         codes.append(c)
 
     for _, items in sections:
@@ -307,8 +309,8 @@ def _presence_column_widths(
                 for ch in world.contents(inst.id):
                     _collect(ch)
 
-    w_prime = max((len(x) for x in primes), default=4)
     w_name = max((len(x) for x in names), default=4)
+    w_prime = max((len(x) for x in primes), default=4)
     w_code = max((len(x) for x in codes), default=8)
     w_t_brick = max((len(x) for x in t_bricks), default=0)
     w_t_code = max((len(x) for x in t_codes), default=0)
@@ -323,8 +325,8 @@ def _presence_column_widths(
     if not any(t_kinds):
         w_t_kind = 0
     return (
-        w_prime,
         w_name,
+        w_prime,
         w_code,
         w_t_brick,
         w_t_code,
@@ -477,7 +479,7 @@ def _format_presence_line(
     world: World | None = None,
     indent: int = 2,
 ) -> str:
-    """One presence row: ordinary prime·name·code, or ticket brick layout."""
+    """One presence row: ordinary name·prime·code, or ticket brick layout."""
     if world is not None and world.is_tdf(inst.id):
         return _format_ticket_presence_line(
             inst,
@@ -491,11 +493,12 @@ def _format_presence_line(
             indent=indent,
         )
     gap = "  "
-    prime, name, code, color_kind = _presence_row(inst, world=world)
+    name, prime, code, color_kind = _presence_row(inst, world=world)
+    # Instance title first (call name), then origin VEN, then face code
     line = (
         f"{' ' * indent}"
-        f"[dim]{fmt.safe(fmt.pad_visible(prime, w_prime))}[/dim]{gap}"
         f"{fmt.colored_padded_name(name, color_kind, w_name)}{gap}"
+        f"[dim]{fmt.safe(fmt.pad_visible(prime, w_prime))}[/dim]{gap}"
         f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]"
     )
     if world is not None:
@@ -512,8 +515,8 @@ def _format_presence_section(
     section_header: str,
     items: list[InstanceView],
     *,
-    w_prime: int,
     w_name: int,
+    w_prime: int,
     w_code: int,
     w_t_brick: int = 0,
     w_t_code: int = 0,
@@ -529,10 +532,14 @@ def _format_presence_section(
     One placement block — shared column grid::
 
       Here
-        Soft Ache      Soft Ache      SNS-001-0001
+        Soft Ache      Soft Ache      sns-a1b2c3
         [TICKET]  TDF-…  Deadline…  July 21  date  due
 
-    Ordinary: prime · name · code.
+      Outer  · Outer Cabinet · out-…
+        Inner             Inner Drawer    inn-…
+        Q1 Report         Report          rep-…
+
+    Ordinary: **name** · prime · code (call name first).
     Tickets: color brick · TDF id · title · [data] · subtype · [kind].
     *deep*: each listed **bin** becomes a nested bin header with its
     contents underneath (one layer only).
@@ -550,8 +557,8 @@ def _format_presence_section(
     def _row(inst: InstanceView, indent: int = 2) -> str:
         return _format_presence_line(
             inst,
-            w_prime=w_prime,
             w_name=w_name,
+            w_prime=w_prime,
             w_code=w_code,
             w_t_brick=w_t_brick,
             w_t_code=w_t_code,
@@ -616,8 +623,8 @@ def _format_look_presence_blocks(
     width_src = [(t, items) for t, items, _ in active if items]
     if width_src:
         (
-            w_prime,
             w_name,
+            w_prime,
             w_code,
             w_t_brick,
             w_t_code,
@@ -627,14 +634,14 @@ def _format_look_presence_blocks(
             w_t_kind,
         ) = _presence_column_widths(width_src, world=world, deep=deep)
     else:
-        w_prime, w_name, w_code = 4, 4, 8
+        w_name, w_prime, w_code = 4, 4, 8
         w_t_brick = w_t_code = w_t_name = w_t_data = w_t_sub = w_t_kind = 0
     return [
         _format_presence_section(
             title,
             items,
-            w_prime=w_prime,
             w_name=w_name,
+            w_prime=w_prime,
             w_code=w_code,
             w_t_brick=w_t_brick,
             w_t_code=w_t_code,

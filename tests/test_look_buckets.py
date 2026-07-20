@@ -150,7 +150,8 @@ class LookPlacementTests(unittest.TestCase):
             "",
         )
         self.assertTrue(drawer_hdr, msg=look_deep)
-        self.assertRegex(drawer_hdr, r"BIN-\d{3}-\d{4}")
+        # Face code on nested bin header (office slug-hex, not legacy BIN-001)
+        self.assertRegex(drawer_hdr, r"[a-z0-9]{2,4}-[0-9a-f]{6}")
         # Loose root (Coffee) before nested bins, with blank line + Here label
         coffee_i = next(
             i for i, ln in enumerate(deep_lines) if "Coffee" in ln
@@ -192,8 +193,8 @@ class LookPlacementTests(unittest.TestCase):
         self.assertIn("Coin", ex_td)
         self.assertIn("Nest", ex_td)
 
-    def test_presence_columns_are_prime_name_code(self) -> None:
-        """Look/examine rows: origin VEN · lived name · instance short ref."""
+    def test_presence_columns_are_name_prime_code(self) -> None:
+        """Look/examine rows: lived name · origin VEN · face code."""
         self.assertTrue(
             dispatch(
                 self.world,
@@ -208,23 +209,22 @@ class LookPlacementTests(unittest.TestCase):
         # No kind/subtype columns in the list grid
         self.assertNotIn("feeling/longing", ache)
         self.assertNotRegex(ache, r"\blonging\s+sense\b")
-        self.assertRegex(ache, r"SNS-\d{3}-\d{4}")
-        # Code column aligns for two rows
+        # Office face code (slug3-hex), not legacy SNS-001-0001
+        self.assertRegex(ache, r"[a-z0-9]{2,4}-[0-9a-f]{6}")
+        # Lived name appears before origin prime when they differ
         self.assertTrue(
             dispatch(self.world, "create sense Bare Hum | x.").ok
         )
-        self.assertTrue(dispatch(self.world, "spawn bare-hum").ok)
+        self.assertTrue(
+            dispatch(self.world, "spawn bare-hum as Loud Hum").ok
+        )
         text2 = plain(dispatch(self.world, "look").message)
-        bare = next(ln for ln in text2.splitlines() if "Bare Hum" in ln)
-        ache2 = next(ln for ln in text2.splitlines() if "Ache" in ln)
-        self.assertRegex(bare, r"SNS-\d{3}-\d{4}")
-        # short-ref codes start at the same visual column
-        import re
-
-        m_a = re.search(r"SNS-\d{3}-\d{4}", ache2)
-        m_b = re.search(r"SNS-\d{3}-\d{4}", bare)
-        assert m_a and m_b
-        self.assertEqual(m_a.start(), m_b.start())
+        bare = next(ln for ln in text2.splitlines() if "Loud Hum" in ln)
+        self.assertRegex(bare, r"Loud Hum")
+        self.assertRegex(bare, r"Bare Hum")
+        # name first: Loud Hum before Bare Hum on the row
+        self.assertLess(bare.index("Loud Hum"), bare.index("Bare Hum"))
+        self.assertRegex(bare, r"[a-z0-9]{2,4}-[0-9a-f]{6}")
 
 
 class EventKindTests(unittest.TestCase):
@@ -250,12 +250,16 @@ class EventKindTests(unittest.TestCase):
         assert ven is not None
         self.assertEqual(ven.kind, "event")
         self.assertEqual((ven.subtype or "").lower(), "meeting")
-        self.assertTrue(ven.code and ven.code.startswith("EVT-"), msg=ven.code)
+        from dos.ids import is_office_ven_code
+
+        self.assertTrue(
+            ven.code and is_office_ven_code(ven.code), msg=ven.code
+        )
         self.assertTrue(dispatch(self.world, "spawn soft-kickoff").ok)
         look = plain(dispatch(self.world, "look").message)
         self.assertIn("Soft Kickoff", look)
         kick = next(ln for ln in look.splitlines() if "Kickoff" in ln)
-        self.assertRegex(kick, r"EVT-\d{3}-\d{4}")
+        self.assertRegex(kick, r"[a-z0-9]{2,4}-[0-9a-f]{6}")
 
 
 class DigBinAndTakeTests(unittest.TestCase):
