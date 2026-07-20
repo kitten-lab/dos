@@ -16,6 +16,49 @@ TICKET_SUBTYPES = frozenset({"date", "label", "note", "tag"})
 # Ticket kinds (due / state semantics)
 TICKET_KINDS = frozenset({"range", "due", "state", "point", "open"})
 
+# Presence brick colors (white text on this background)
+TICKET_BRICK_COLORS: dict[str, str] = {
+    "date": "#5ec8d8",  # cyan — calendars / deadlines
+    "note": "#d4a574",  # warm gold — scribbles
+    "label": "#c084fc",  # soft purple — tags
+    "tag": "#4ade80",  # green
+}
+
+
+def ticket_brick_plain(subtype: str | None) -> str:
+    """Visible brick text without markup: ``[TICKET:DATE]``."""
+    sub = (subtype or "SLIP").strip().upper() or "SLIP"
+    if sub.startswith("TICKET"):
+        return f"[{sub}]"
+    return f"[TICKET:{sub}]"
+
+
+def ticket_brick_color(subtype: str | None) -> str:
+    """Background color for the ticket type brick."""
+    key = (subtype or "").strip().lower()
+    return TICKET_BRICK_COLORS.get(key, "#6b7280")  # slate fallback
+
+
+def ticket_brick_markup(subtype: str | None) -> str:
+    """White-on-color brick for look / inv presence rows."""
+    plain = ticket_brick_plain(subtype)
+    # strip outer [] for the pill interior; keep label TICKET:DATE
+    inner = plain.strip("[]")
+    color = ticket_brick_color(subtype)
+    return f"[bold white on {color}] {inner} [/]"
+
+
+def ticket_data_display(data: dict[str, Any] | None) -> str:
+    """Human date/range column from tdf_data."""
+    d = data or {}
+    start = (d.get("start") or "").strip()
+    end = (d.get("end") or "").strip()
+    if start and end:
+        return f"{start} → {end}"
+    if start:
+        return start
+    return (d.get("raw") or d.get("when") or "").strip()
+
 
 def parse_range_text(raw: str) -> dict[str, Any]:
     """

@@ -44,6 +44,7 @@ KIND_COLORS: dict[str, str] = {
     "purpose": "bright_magenta",
     "event": "bright_yellow",
     "archetype": "yellow",
+    "ticket": "cyan",  # TDF slips
     "other": "white",
 }
 

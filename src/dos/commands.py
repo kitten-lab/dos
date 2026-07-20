@@ -219,55 +219,44 @@ def _presence_code(world: World | None, inst: InstanceView) -> str:
     return (inst.ven_code or "—").strip() or "—"
 
 
-def _tdf_data_display(world: World | None, inst: InstanceView) -> str:
+def _ticket_presence_fields(
+    world: World, inst: InstanceView
+) -> tuple[str, str, str, str, str]:
     """
-    Human contents for a ticket slip column (range / due / raw).
+    Plain ticket columns (no markup)::
 
-    Empty for non-TDFs so the data column can collapse when unused.
+      brick · code · name · data · kind
+
+    Example: ``[TICKET:DATE]`` / ``TDF-…`` / title / ``July 21 2026`` / ``due``
     """
-    if world is None or not world.is_tdf(inst.id):
-        return ""
+    from .tdf import ticket_brick_plain, ticket_data_display
+
     payload = world.tdf_payload(inst.id) or {}
-    data = payload.get("data") or {}
-    start = (data.get("start") or "").strip()
-    end = (data.get("end") or "").strip()
-    if start and end:
-        return f"{start} → {end}"
-    if start:
-        return start
-    raw = (data.get("raw") or data.get("when") or "").strip()
-    return raw
+    sub = (payload.get("subtype") or "").strip()
+    kind = (payload.get("kind") or "").strip().lower()
+    data = ticket_data_display(payload.get("data") or {})
+    name = display_name(inst.name or "")
+    # Notes often *are* the body — prefer name; data stays empty unless dates
+    code = (payload.get("code") or _presence_code(world, inst) or "").strip()
+    brick = ticket_brick_plain(sub)
+    # Kind column only when it adds signal (not blank)
+    kind_col = kind if kind else ""
+    return brick, code, name, data, kind_col
 
 
 def _presence_row(
     inst: InstanceView, *, world: World | None = None
-) -> tuple[str, str, str, str, str]:
+) -> tuple[str, str, str, str]:
     """
-    Plain columns for look / examine lists::
+    Plain columns for ordinary (non-ticket) look / examine lists::
 
-      prime · name · data · code · color_kind
-
-    Prime = origin VEN name; name = lived title; data = TDF contents (range…);
-    code = instance short ref / TDF-########.
-    TDFs show subtype as prime chip, range in data, TDF code as code.
+      prime · name · code · color_kind
     """
     name = display_name(inst.name or "")
     kind = (inst.ven_kind or "other").strip() or "other"
     prime = display_name(inst.ven_name or "") or "—"
-    data = ""
-    if world is not None and world.is_tdf(inst.id):
-        payload = world.tdf_payload(inst.id) or {}
-        sub = (payload.get("subtype") or "").strip()
-        k = (payload.get("kind") or "").strip()
-        if sub and k:
-            prime = f"ticket/{sub}:{k}"
-        elif sub:
-            prime = f"ticket/{sub}"
-        else:
-            prime = "ticket"
-        data = _tdf_data_display(world, inst)
     code = _presence_code(world, inst)
-    return prime, name, data, code, kind
+    return prime, name, code, kind
 
 
 def _presence_column_widths(
@@ -275,21 +264,37 @@ def _presence_column_widths(
     *,
     world: World | None = None,
     deep: bool = False,
-) -> tuple[int, int, int, int]:
-    """Widest PRIME / NAME / DATA / CODE across every non-empty section.
+) -> tuple[int, int, int, int, int, int, int, int]:
+    """
+    Widths for ordinary rows and ticket rows.
 
-    *data* width is 0 when no row carries TDF contents (column omitted).
+    Returns::
+      w_prime, w_name, w_code,
+      w_t_brick, w_t_code, w_t_name, w_t_data, w_t_kind
+
+    Ticket kind width is 0 when no ticket shows a kind (column omitted).
     """
     primes: list[str] = []
     names: list[str] = []
-    datas: list[str] = []
     codes: list[str] = []
+    t_bricks: list[str] = []
+    t_codes: list[str] = []
+    t_names: list[str] = []
+    t_datas: list[str] = []
+    t_kinds: list[str] = []
 
     def _collect(inst: InstanceView) -> None:
-        p, n, d, c, _ = _presence_row(inst, world=world)
+        if world is not None and world.is_tdf(inst.id):
+            b, c, n, d, k = _ticket_presence_fields(world, inst)
+            t_bricks.append(b)
+            t_codes.append(c)
+            t_names.append(n)
+            t_datas.append(d)
+            t_kinds.append(k)
+            return
+        p, n, c, _ = _presence_row(inst, world=world)
         primes.append(p)
         names.append(n)
-        datas.append(d)
         codes.append(c)
 
     for _, items in sections:
@@ -298,17 +303,28 @@ def _presence_column_widths(
             if deep and world is not None and _is_placement_bin(inst):
                 for ch in world.contents(inst.id):
                     _collect(ch)
-    if not names:
-        return 4, 4, 0, 8
-    w_data = max((len(x) for x in datas), default=0)
-    # Only reserve a data column when something actually has contents
-    if not any(datas):
-        w_data = 0
+
+    w_prime = max((len(x) for x in primes), default=4)
+    w_name = max((len(x) for x in names), default=4)
+    w_code = max((len(x) for x in codes), default=8)
+    w_t_brick = max((len(x) for x in t_bricks), default=0)
+    w_t_code = max((len(x) for x in t_codes), default=0)
+    w_t_name = max((len(x) for x in t_names), default=0)
+    w_t_data = max((len(x) for x in t_datas), default=0)
+    if not any(t_datas):
+        w_t_data = 0
+    w_t_kind = max((len(x) for x in t_kinds), default=0)
+    if not any(t_kinds):
+        w_t_kind = 0
     return (
-        max(len(x) for x in primes),
-        max(len(x) for x in names),
-        w_data,
-        max(len(x) for x in codes),
+        w_prime,
+        w_name,
+        w_code,
+        w_t_brick,
+        w_t_code,
+        w_t_name,
+        w_t_data,
+        w_t_kind,
     )
 
 
@@ -395,29 +411,81 @@ def _bin_bucket_header(
     )
 
 
+def _format_ticket_presence_line(
+    inst: InstanceView,
+    *,
+    world: World,
+    w_brick: int,
+    w_code: int,
+    w_name: int,
+    w_data: int,
+    w_kind: int,
+    indent: int = 2,
+) -> str:
+    """
+    Ticket presence row (floor or in a bin)::
+
+      [TICKET:DATE]  TDF-…  Deadline…  July 21 2026  due
+      [TICKET:NOTE]  TDF-…  The wait is over…
+    """
+    from .tdf import ticket_brick_markup
+
+    gap = "  "
+    brick_plain, code, name, data, kind = _ticket_presence_fields(world, inst)
+    payload = world.tdf_payload(inst.id) or {}
+    sub = (payload.get("subtype") or "").strip()
+    # Brick: colored pill, then pad to grid using plain width
+    brick_mk = ticket_brick_markup(sub)
+    brick_pad = max(0, w_brick - len(brick_plain))
+    line = f"{' ' * indent}{brick_mk}{' ' * brick_pad}{gap}"
+    line += f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]{gap}"
+    line += f"{fmt.colored_padded_name(name, 'ticket', w_name)}"
+    if w_data > 0:
+        line += f"{gap}[dim]{fmt.safe(fmt.pad_visible(data or '', w_data))}[/dim]"
+    if w_kind > 0:
+        line += f"{gap}[dim]{fmt.safe(fmt.pad_visible(kind or '', w_kind))}[/dim]"
+    if world is not None:
+        slot_row = world.container_of(inst.id)
+        slot = (slot_row[1] if slot_row else "") or ""
+        if slot and slot not in ("interior", "inventory"):
+            line += f"{gap}[dim]{fmt.safe(slot)}[/dim]"
+    return line
+
+
 def _format_presence_line(
     inst: InstanceView,
     *,
     w_prime: int,
     w_name: int,
-    w_data: int,
     w_code: int,
+    w_t_brick: int = 0,
+    w_t_code: int = 0,
+    w_t_name: int = 0,
+    w_t_data: int = 0,
+    w_t_kind: int = 0,
     world: World | None = None,
     indent: int = 2,
 ) -> str:
-    """One presence row: prime · name · [data] · code (+ optional slot)."""
+    """One presence row: ordinary prime·name·code, or ticket brick layout."""
+    if world is not None and world.is_tdf(inst.id):
+        return _format_ticket_presence_line(
+            inst,
+            world=world,
+            w_brick=max(w_t_brick, 12),
+            w_code=max(w_t_code, 12),
+            w_name=max(w_t_name, 8),
+            w_data=w_t_data,
+            w_kind=w_t_kind,
+            indent=indent,
+        )
     gap = "  "
-    prime, name, data, code, color_kind = _presence_row(inst, world=world)
+    prime, name, code, color_kind = _presence_row(inst, world=world)
     line = (
         f"{' ' * indent}"
         f"[dim]{fmt.safe(fmt.pad_visible(prime, w_prime))}[/dim]{gap}"
         f"{fmt.colored_padded_name(name, color_kind, w_name)}{gap}"
+        f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]"
     )
-    if w_data > 0:
-        # Ticket contents (range / due) — dim; non-tickets pad blank (no dash noise)
-        cell = data if data else ""
-        line += f"[dim]{fmt.safe(fmt.pad_visible(cell, w_data))}[/dim]{gap}"
-    line += f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]"
     if world is not None:
         # Slot only when non-default (feeling, worn, …). interior + inventory
         # are the usual "in this list" slots — no trailer. No "run" badge.
@@ -434,8 +502,12 @@ def _format_presence_section(
     *,
     w_prime: int,
     w_name: int,
-    w_data: int,
     w_code: int,
+    w_t_brick: int = 0,
+    w_t_code: int = 0,
+    w_t_name: int = 0,
+    w_t_data: int = 0,
+    w_t_kind: int = 0,
     show_if_empty: bool = False,
     world: World | None = None,
     deep: bool = False,
@@ -445,17 +517,10 @@ def _format_presence_section(
 
       Here
         Soft Ache      Soft Ache      SNS-001-0001
+        [TICKET:DATE]  TDF-…  Deadline…  July 21  due
 
-      Table  · Table · BIN-001-0001
-        Here
-          Coffee Cup     Coffee     THG-001-0002   ← root / not-in-bin first
-                                                ← blank line
-        └─ Drawer  · Drawer · BIN-002-0001
-            Spoon      Spoon      THG-003-0001
-
-    Columns: prime · name · [data] · code. *data* (ticket range/due) only when
-    any row in the shared grid carries TDF contents.
-    Loose items always list before nested bins (blank line between).
+    Ordinary: prime · name · code.
+    Tickets: colored brick · TDF id · title · [data] · [kind].
     *deep*: each listed **bin** becomes a nested bin header with its
     contents underneath (one layer only).
     """
@@ -474,8 +539,12 @@ def _format_presence_section(
             inst,
             w_prime=w_prime,
             w_name=w_name,
-            w_data=w_data,
             w_code=w_code,
+            w_t_brick=w_t_brick,
+            w_t_code=w_t_code,
+            w_t_name=w_t_name,
+            w_t_data=w_t_data,
+            w_t_kind=w_t_kind,
             world=world,
             indent=indent,
         )
@@ -532,19 +601,31 @@ def _format_look_presence_blocks(
         return []
     width_src = [(t, items) for t, items, _ in active if items]
     if width_src:
-        w_prime, w_name, w_data, w_code = _presence_column_widths(
-            width_src, world=world, deep=deep
-        )
+        (
+            w_prime,
+            w_name,
+            w_code,
+            w_t_brick,
+            w_t_code,
+            w_t_name,
+            w_t_data,
+            w_t_kind,
+        ) = _presence_column_widths(width_src, world=world, deep=deep)
     else:
-        w_prime, w_name, w_data, w_code = 4, 4, 0, 8
+        w_prime, w_name, w_code = 4, 4, 8
+        w_t_brick = w_t_code = w_t_name = w_t_data = w_t_kind = 0
     return [
         _format_presence_section(
             title,
             items,
             w_prime=w_prime,
             w_name=w_name,
-            w_data=w_data,
             w_code=w_code,
+            w_t_brick=w_t_brick,
+            w_t_code=w_t_code,
+            w_t_name=w_t_name,
+            w_t_data=w_t_data,
+            w_t_kind=w_t_kind,
             show_if_empty=show_empty,
             world=world,
             deep=deep,
@@ -5556,7 +5637,7 @@ def _print_ticket(world: World, arg: str) -> str:
         return fmt.err(parsed.error)
 
     subtype = parsed.get("subtype") or "date"
-    kind = parsed.get("kind") or "range"
+    kind = parsed.get("kind")  # may be empty — default depends on subtype
     name = parsed.get("name")
     desc = parsed.get("desc")
 
@@ -5577,7 +5658,10 @@ def _print_ticket(world: World, arg: str) -> str:
         )
 
     subtype_l = subtype.lower().strip()
-    kind_l = kind.lower().strip()
+    kind_l = (kind or "").lower().strip()
+    # Defaults: dates → range; notes/labels → no kind column noise
+    if not kind_l:
+        kind_l = "range" if subtype_l in ("date", "") else ""
     # Soft allow unknown subtypes/kinds (office vocabulary will grow)
     if subtype_l not in TICKET_SUBTYPES and subtype_l:
         pass  # allow custom

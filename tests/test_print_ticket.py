@@ -51,10 +51,12 @@ class PrintTicketTests(unittest.TestCase):
 
         look = plain(dispatch(self.world, "look").message)
         self.assertIn("Global Release Date", look)
-        # Presence row shows slip contents (range), not only title + code
+        # Brick + id + details + kind
+        self.assertIn("TICKET:DATE", look)
         self.assertIn("Jan 20", look)
         self.assertIn("Feb 15", look)
         self.assertRegex(look, r"Jan 20.*Feb 15")
+        self.assertIn("range", look.lower())
 
         # recover code from print message
         code = None
