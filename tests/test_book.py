@@ -635,6 +635,9 @@ class BookReaderStructureTests(unittest.TestCase):
         self.assertIn("rgba", br)  # soft dim backdrop
         self.assertIn('Binding("e"', br)
         self.assertIn('Binding("plus"', br)  # + add leaf (not bare a)
+        self.assertIn("shift+equals", br)  # main-keyboard +
+        self.assertIn("_refocus_reader", br)
+        self.assertIn("set_book_page_title_by_id", br)  # insert-safe save
         self.assertIn("leaf", br.lower())
         # no side-pane width tokens left on cli
         self.assertFalse(hasattr(cli, "TUI_BOOK_PANE_WIDTH"))

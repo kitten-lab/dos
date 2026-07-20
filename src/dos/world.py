@@ -3294,17 +3294,28 @@ class World:
         """Replace the title of a 1-based page (reader chrome / page heading)."""
         self._require_book(book_instance_id)
         page = self._book_page_row(book_instance_id, page_position)
+        return self.set_book_page_title_by_id(page["id"], title)
+
+    def set_book_page_title_by_id(self, page_id: str, title: str) -> sqlite3.Row:
+        """Replace title by stable page id (safe across insert renumbering)."""
         self.conn.execute(
             "UPDATE book_pages SET title = ? WHERE id = ?",
-            ((title or "").strip(), page["id"]),
+            ((title or "").strip(), page_id),
         )
         self.conn.commit()
         row = self.conn.execute(
             "SELECT * FROM book_pages WHERE id = ?",
-            (page["id"],),
+            (page_id,),
         ).fetchone()
-        assert row is not None
+        if row is None:
+            raise ValueError(f"No book page {page_id}")
         return row
+
+    def set_book_page_body_by_id(self, page_id: str, body: str) -> sqlite3.Row:
+        """Replace body by stable page id (safe across insert renumbering)."""
+        return self._update_book_page_body(
+            page_id, body if body is not None else ""
+        )
 
     def insert_book_page_lines(
         self,

@@ -145,8 +145,17 @@ def make_book_reader_screen(
             # Both cases: caps lock turns "e" into "E" (not the same binding)
             Binding("e", "edit_page", "Edit leaf", show=True, priority=True),
             Binding("E", "edit_page", "Edit leaf", show=False, priority=True),
-            # plus — deliberate add (not bare "a" / unshifted =)
+            # + add leaf — numpad plus AND main keyboard Shift+= (Windows)
             Binding("plus", "add_leaf", "Add leaf", show=True, priority=True),
+            Binding(
+                "shift+equals",
+                "add_leaf",
+                "Add leaf",
+                show=False,
+                priority=True,
+            ),
+            # Some terminals report the produced character as the key
+            Binding("+", "add_leaf", "Add leaf", show=False, priority=True),
         ]
 
         def __init__(self) -> None:
@@ -173,21 +182,47 @@ def make_book_reader_screen(
             self._refresh_view()
             self._refocus_reader()
 
+        def _studio_screen_open(self) -> bool:
+            """True if a nested studio buffer is still on the app stack."""
+            try:
+                for screen in self.app.screen_stack:
+                    if screen is self:
+                        continue
+                    if type(screen).__name__ == "StudioBufferScreen":
+                        return True
+            except Exception:  # noqa: BLE001
+                pass
+            return False
+
         def _refocus_reader(self) -> None:
-            """Restore key focus after studio dismiss (nested modal focus bug)."""
+            """Restore key focus after studio dismiss (nested modal focus bug).
+
+            Focus the *screen* (not the scroll view). Focusing VerticalScroll
+            after the first studio close could swallow printable keys like ``+``
+            so add-leaf only appeared to work once.
+            """
 
             def _go() -> None:
                 if not self.is_attached:
                     return
+                # Recover stuck flag if dismiss callback never fired
+                if self._studio_open and not self._studio_screen_open():
+                    self._studio_open = False
                 try:
                     scroll = self.query_one(
                         "#book-reader-scroll", VerticalScroll
                     )
-                    scroll.can_focus = True
-                    self.set_focus(scroll)
+                    # Scroll still scrolls with wheel/page keys via screen;
+                    # keep it unfocused so + / e / arrows hit screen bindings.
+                    scroll.can_focus = False
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    self.can_focus = True
+                    self.focus()
                 except Exception:  # noqa: BLE001
                     try:
-                        self.focus()
+                        self.set_focus(None)
                     except Exception:  # noqa: BLE001
                         pass
                 try:
@@ -283,6 +318,16 @@ def make_book_reader_screen(
             from .commands import _push_book_page_delete_undo
             from .studio_text import prepare_stored_text
 
+            # Recover stuck flag if studio screen is gone but flag stayed True
+            if self._studio_open and not self._studio_screen_open():
+                self._studio_open = False
+            if self._studio_open or self._studio_screen_open():
+                self.notify(
+                    "Finish or cancel the open studio first (Ctrl+S / Esc).",
+                    severity="warning",
+                )
+                return
+
             book = world.get_instance(self._book_id)
             if book is None:
                 self.notify("Book missing.", severity="error")
@@ -297,10 +342,12 @@ def make_book_reader_screen(
                 self._page_index = page_index_after_nav(
                     self._page_index, 0, count
                 )
-                cur_pos = int(pages[self._page_index]["position"])
-                insert_at = cur_pos + 1  # after current
+                # Prefer ordered index (+1) over position column so inserts stay
+                # correct even if positions were ever gapped.
+                insert_at = self._page_index + 2  # after current (1-based)
                 new_index = self._page_index + 1
 
+            before = len(self._pages())
             seed_body = prepare_stored_text(_NEW_LEAF_BODY_SEED, studio=True)
             try:
                 pid = world.add_book_page(
@@ -313,15 +360,32 @@ def make_book_reader_screen(
                 self.notify(f"Could not add leaf: {e}", severity="error")
                 return
 
+            after = len(self._pages())
+            if after <= before:
+                self.notify(
+                    "Leaf was not created (count unchanged).",
+                    severity="error",
+                )
+                return
+
             _push_book_page_delete_undo(
                 world,
                 self._book_id,
                 pid,
                 f"add leaf {display_name(book.name)}",
             )
+            # Jump to the page we just inserted (by id, not assumed index)
+            pages_now = self._pages()
+            new_index = next(
+                (i for i, p in enumerate(pages_now) if p["id"] == pid),
+                min(new_index, max(0, len(pages_now) - 1)),
+            )
             self._page_index = new_index
             self._refresh_view()
-            self.notify("Leaf added.", severity="information")
+            self.notify(
+                f"Leaf added · leaf {new_index + 1}/{len(pages_now)}",
+                severity="information",
+            )
             # Drop into singular studio on the new leaf
             self.action_edit_page()
 
@@ -333,8 +397,10 @@ def make_book_reader_screen(
                 _push_book_page_title_body_undo,
             )
 
+            if self._studio_open and not self._studio_screen_open():
+                self._studio_open = False
             # Nested studio already open (or dismiss in flight) — ignore e spam
-            if self._studio_open:
+            if self._studio_open or self._studio_screen_open():
                 return
 
             book = world.get_instance(self._book_id)
@@ -352,7 +418,7 @@ def make_book_reader_screen(
                 self._page_index, 0, len(pages)
             )
             page = pages[self._page_index]
-            pos = int(page["position"])
+            leaf_n = self._page_index + 1
             page_id = page["id"]
             prior_title = page["title"] or ""
             prior_body = page["body"] or ""
@@ -361,7 +427,7 @@ def make_book_reader_screen(
             if initial.strip() == _NEW_LEAF_BODY_SEED:
                 initial = ""
             title = (
-                f"leaf {pos} · {display_name(book.name)} · studio"
+                f"leaf {leaf_n} · {display_name(book.name)} · studio"
             )
             screen = make_studio_buffer_screen(
                 initial=initial,
@@ -391,12 +457,9 @@ def make_book_reader_screen(
                     )
                     new_body = prepare_stored_text(result.body, studio=True)
                     try:
-                        world.set_book_page_title(
-                            self._book_id, pos, new_title
-                        )
-                        world.set_book_page_body(
-                            self._book_id, pos, new_body
-                        )
+                        # Save by page id — not position index (insert-safe)
+                        world.set_book_page_title_by_id(page_id, new_title)
+                        world.set_book_page_body_by_id(page_id, new_body)
                     except Exception as e:  # noqa: BLE001
                         self.notify(f"Save failed: {e}", severity="error")
                         return
@@ -406,13 +469,13 @@ def make_book_reader_screen(
                             page_id,
                             prior_title,
                             prior_body,
-                            f"leaf edit {display_name(book.name)} {pos}",
+                            f"leaf edit {display_name(book.name)} {leaf_n}",
                         )
                     self.notify("Leaf saved.", severity="information")
                     self._refresh_view()
                 finally:
                     self._studio_open = False
-                    # Critical: nested modal leaves reader without focus → e dies
+                    # Critical: nested modal leaves reader without focus → +/e die
                     self._refocus_reader()
 
             try:
