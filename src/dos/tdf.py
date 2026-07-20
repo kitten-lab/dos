@@ -89,6 +89,7 @@ def normalize_ticket_data(
     k = (kind or "").lower().strip()
     desc = (description or "").strip()
 
+    # Date/range slips parse -d into start/end; notes keep free text as title mostly
     if k == "range" or (sub == "date" and desc and "start" not in out):
         rng = parse_range_text(desc)
         out.setdefault("start", rng.get("start") or "")
@@ -101,7 +102,10 @@ def normalize_ticket_data(
             out.setdefault("start", desc)
 
     out.setdefault("subtype", sub)
-    out.setdefault("kind", k)
+    if k:
+        out["kind"] = k
+    else:
+        out.setdefault("kind", "")
     return out
 
 

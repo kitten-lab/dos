@@ -548,7 +548,8 @@ class World:
             dest = loc.id
 
         subtype_n = (subtype or "").strip().lower() or "date"
-        kind_n = (kind or "").strip().lower() or "range"
+        # Empty kind is allowed (notes); do not force "range" on every slip
+        kind_n = (kind or "").strip().lower()
         title = normalize_instance_title(name)
         payload = normalize_ticket_data(subtype_n, kind_n, description, data)
         desc = (description or "").strip() or build_ticket_description(
