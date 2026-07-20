@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
 
-from . import PRODUCT_NAME, format as fmt
+from . import format as fmt
 from .commands import dispatch
 from .db import connect, get_meta, init_schema, migrate_schema
 from .help_ui import HelpPane
