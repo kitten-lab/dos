@@ -170,65 +170,90 @@ def Path_read(path: str) -> str | None:
         return None
 
 
-EDITOR_CSS = """
-#editor-hint {
+def _editor_css() -> str:
+    """STUDIO Writer chrome — classic DOS blue (matches main TUI)."""
+    from .cli import (
+        TUI_BG,
+        TUI_BORDER,
+        TUI_BORDER_ACCENT,
+        TUI_INPUT_BG,
+        TUI_MUTED,
+        TUI_PANEL,
+        TUI_TEXT,
+        TUI_TEXT_BRIGHT,
+    )
+
+    return f"""
+#editor-hint {{
     height: auto;
-    color: #8a8a96;
+    color: {TUI_MUTED};
     padding: 0 1;
-    background: #0a0a0c;
-}
-#editor-title-row {
+    background: {TUI_BG};
+}}
+#editor-title-row {{
     height: 3;
     width: 100%;
     padding: 0 1;
-    background: #0a0a0c;
+    background: {TUI_BG};
     layout: horizontal;
-}
-#editor-title-label {
+}}
+#editor-title-label {{
     width: auto;
     height: 3;
     content-align: left middle;
-    color: #8a8a96;
+    color: {TUI_MUTED};
     padding-right: 1;
-}
-#editor-page-title {
+}}
+#editor-page-title {{
     width: 1fr;
     height: 3;
-    border: solid #2a2a32;
-    background: #000000;
-    color: #e8e8ee;
+    border: solid {TUI_BORDER};
+    background: {TUI_INPUT_BG};
+    color: {TUI_TEXT_BRIGHT};
     padding: 0 1;
-}
-#editor-gap {
+}}
+#editor-gap {{
     height: 1;
-    background: #0a0a0c;
-}
-#editor-ruler {
+    background: {TUI_BG};
+}}
+#editor-ruler {{
     height: auto;
-    color: #c4c4d0;
+    color: {TUI_BORDER_ACCENT};
     padding: 0 1;
-    background: #0a0a0c;
-}
-#editor-body {
+    background: {TUI_BG};
+}}
+#editor-body {{
     height: 1fr;
-    border: solid #2a2a32;
+    border: solid {TUI_BORDER_ACCENT};
     margin: 0 1 1 1;
-    background: #000000;
-    color: #e8e8ee;
-}
-#editor-preview-scroll {
+    background: {TUI_INPUT_BG};
+    color: {TUI_TEXT};
+}}
+#editor-preview-scroll {{
     height: 1fr;
-    border: solid #3a4a3a;
+    border: solid {TUI_BORDER};
     margin: 0 1 1 1;
-    background: #000000;
-}
-#editor-preview {
+    background: {TUI_INPUT_BG};
+}}
+#editor-preview {{
     height: auto;
     padding: 1 2;
-    background: #000000;
-    color: #e8e8ee;
-}
+    background: {TUI_INPUT_BG};
+    color: {TUI_TEXT};
+}}
 """
+
+
+# Back-compat name used by ModalScreen / App CSS
+EDITOR_CSS = None  # filled lazily via _get_editor_css()
+
+
+def _get_editor_css() -> str:
+    global EDITOR_CSS
+    if not EDITOR_CSS:
+        EDITOR_CSS = _editor_css()
+    return EDITOR_CSS
+
 
 # Shared buffer chrome brand (desc, lore, folio leaves — not folio-only)
 STUDIO_WRITER_LABEL = "STUDIO Writer"
@@ -236,18 +261,27 @@ _STUDIO_WRITER_THEME_NAME = "studio_writer"
 
 
 def _studio_writer_textarea_theme():
-    """Pure black artboard + light document text (default 'css' theme is invisible)."""
+    """DOS-blue artboard + light document text (matches main TUI)."""
     from rich.style import Style
     from textual.widgets.text_area import TextAreaTheme
 
+    from .cli import (
+        TUI_BORDER_ACCENT,
+        TUI_INPUT_BG,
+        TUI_MUTED,
+        TUI_PANEL,
+        TUI_TEXT,
+        TUI_TEXT_BRIGHT,
+    )
+
     return TextAreaTheme(
         name=_STUDIO_WRITER_THEME_NAME,
-        base_style=Style(color="#e8e8ee", bgcolor="#000000"),
-        gutter_style=Style(color="#6a6a78", bgcolor="#000000"),
-        cursor_style=Style(color="#000000", bgcolor="#e8e8ee"),
-        cursor_line_style=Style(bgcolor="#121218"),
-        cursor_line_gutter_style=Style(color="#8a8a96", bgcolor="#121218"),
-        selection_style=Style(bgcolor="#2a3a48"),
+        base_style=Style(color=TUI_TEXT, bgcolor=TUI_INPUT_BG),
+        gutter_style=Style(color=TUI_MUTED, bgcolor=TUI_INPUT_BG),
+        cursor_style=Style(color=TUI_INPUT_BG, bgcolor=TUI_TEXT_BRIGHT),
+        cursor_line_style=Style(bgcolor=TUI_PANEL),
+        cursor_line_gutter_style=Style(color=TUI_BORDER_ACCENT, bgcolor=TUI_PANEL),
+        selection_style=Style(bgcolor="#0033cc"),
     )
 
 
@@ -420,9 +454,10 @@ def make_studio_buffer_screen(
     from textual.widgets import Footer, Input, Static, TextArea
 
     show_title = page_title is not None
+    _css = _get_editor_css()
 
     class StudioBufferScreen(ModalScreen[StudioBufferResult | None]):
-        CSS = EDITOR_CSS
+        CSS = _css
         BINDINGS = [
             # F2 / Alt+P: Ctrl+P is stolen by VS Code Quick Open in the integrated terminal
             Binding("f2", "toggle_preview", "Preview", show=True, priority=True),
@@ -568,12 +603,12 @@ def _run_textual_editor(
 
     result: dict[str, StudioBufferResult | None] = {"out": None}
     show_title = page_title is not None
+    from .cli import TUI_BG
+
+    _app_css = f"Screen {{ background: {TUI_BG}; }}\n" + _get_editor_css()
 
     class StudioBufferApp(App[None]):
-        CSS = (
-            "Screen { background: #0a0a0c; }\n"
-            + EDITOR_CSS
-        )
+        CSS = _app_css
         BINDINGS = [
             Binding("f2", "toggle_preview", "Preview", show=True, priority=True),
             Binding("alt+p", "toggle_preview", "Preview", show=False, priority=True),
