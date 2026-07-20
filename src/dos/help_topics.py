@@ -50,6 +50,7 @@ _TOPIC_ALIASES: dict[str, tuple[str, ...]] = {
     "undo": ("undo", "u"),
     "text": ("text", "textlog", "revisions"),
     "clear": ("clear", "clr"),
+    "cls": ("cls", "refresh", "ref", "blink"),
     "help": ("help", "?"),
     "quit": ("quit", "exit", "q"),
     "concepts": ("concepts", "ven", "vens-model", "model"),
@@ -161,6 +162,7 @@ _HELP_INDEX_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         [
             ("undo", "Undo last builder action"),
             ("clear", "Clear the log (go also clears after a move)"),
+            ("cls", "Clear the log and look (refresh / blink)"),
             ("help", "Cheat sheet · 1–9 section · 11 topic · all catalog"),
             ("quit", "Leave the studio"),
         ],
@@ -1165,7 +1167,7 @@ def _init_topics() -> None:
                 "Wipe the session transcript to a blank log — no tips banner, "
                 "no “cleared” notice. In the TUI this empties the world log; in "
                 "the plain REPL it clears the terminal when possible. "
-                "The studio header bar (place / seed) stays; only the scrollback goes."
+                "The studio header bar stays; only the scrollback goes."
             ),
             fmt.section("Usage"),
             fmt.example_line("clear"),
@@ -1177,6 +1179,29 @@ def _init_topics() -> None:
                 "readable after a long build session."
             ),
             fmt.example_line("go south", "Clears log, then shows the new room"),
+            fmt.section("Also"),
+            _p(
+                "Want a blank log *and* a fresh room view?  "
+                "Use cls (or refresh / blink) — clear + look in one silly step."
+            ),
+        ),
+        "cls": _page(
+            "cls",
+            _p(
+                "Clear the scrollback, then print a fresh look of where you are. "
+                "DOS nostalgia (cls) with office utility — wipe the mess, see the room."
+            ),
+            fmt.section("Usage"),
+            fmt.example_line("cls", "Clear log + look"),
+            fmt.example_line("refresh", "Alias"),
+            fmt.example_line("ref", "Short alias"),
+            fmt.example_line("blink", "Silly alias"),
+            fmt.example_line("cls deep", "Clear + look --deep"),
+            fmt.section("vs clear"),
+            _p(
+                "clear / clr only empties the log. "
+                "cls empties the log and reprints the place."
+            ),
         ),
         "text": _page(
             "text",

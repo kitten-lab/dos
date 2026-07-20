@@ -329,7 +329,7 @@ def _studio_boot_banner_markup(world_path: Path, world_name: str) -> str:
     _ = world_path, world_name
     return (
         f"[dim]help / ? or F1 = help pane  ·  folio open = reader (←/→ · + leaf · e edit)[/dim]\n"
-        f"[dim]↑ / ↓ previous commands · locate self · clear / clr[/dim]\n"
+        f"[dim]↑ / ↓ previous commands · locate self · clear · cls (clear+look)[/dim]\n"
     )
 
 

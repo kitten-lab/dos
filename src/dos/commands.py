@@ -82,6 +82,9 @@ def dispatch(world: World, line: str) -> CommandResult:
         if cmd in ("clear", "clr"):
             # Empty message + clear_log → totally blank transcript (no tips banner)
             return CommandResult(True, "", clear_log=True)
+        # Silly/useful: wipe transcript then reprint the room (DOS cls energy)
+        if cmd in ("cls", "refresh", "ref", "blink"):
+            return CommandResult(True, _look(world, arg), clear_log=True)
         if cmd in ("help", "?"):
             return CommandResult(True, _help(arg))
         if cmd in ("look", "l"):

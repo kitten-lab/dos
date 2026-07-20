@@ -59,9 +59,19 @@ class ClearCommandTests(unittest.TestCase):
         self.assertTrue(r.ok)
         self.assertFalse(r.clear_log)
 
+    def test_cls_clears_and_looks(self) -> None:
+        for cmd in ("cls", "refresh", "ref", "blink"):
+            r = dispatch(self.world, cmd)
+            self.assertTrue(r.ok, msg=cmd)
+            self.assertTrue(r.clear_log, msg=cmd)
+            text = plain(r.message)
+            self.assertIn("Location:", text, msg=cmd)
+
     def test_help_clear_resolves(self) -> None:
         self.assertEqual(resolve_topic("clear"), "clear")
         self.assertEqual(resolve_topic("clr"), "clear")
+        self.assertEqual(resolve_topic("cls"), "cls")
+        self.assertEqual(resolve_topic("blink"), "cls")
         r = dispatch(self.world, "help clear")
         self.assertTrue(r.ok)
         text = plain(r.message).lower()
