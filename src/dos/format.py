@@ -368,7 +368,7 @@ def _manual_concepts() -> str:
             "Going “through the mirror” is a normal path, not a special engine mode.",
             "Elevate — promote a lived instance into a new Prime VEN that can spawn "
             "further instances later.",
-            "Lore revisions — append-only notes on a place (or VEN), optionally tagged "
+            "Records — append-only notes on a place (or VEN), optionally tagged "
             "with a timeline or when-label, so history accumulates instead of overwriting.",
         ),
         gap=0,
@@ -464,17 +464,18 @@ def _manual_build(kinds: str) -> str:
 
 def _manual_lore() -> str:
     return join_blocks(
-        rule("Lore and history"),
+        rule("Records and history"),
         prose_block(
-            "Lore is a revision log, not a single blurb. Add entries as the place changes "
-            "across your story’s timeline."
+            "Records are a revision log, not a single blurb. Add entries as the place "
+            "changes — office notes, filed history, not mythology."
         ),
-        example_line("lore", "Show revisions for the current place"),
+        example_line("record", "Show records for the current place"),
         example_line(
-            "lore add Founding | The nave was raised for market travelers.",
-            "Title | body  (title optional: lore add just the body works)",
+            "record add Founding | Raised for market travelers.",
+            "Title | body  (title optional: record add just the body works)",
         ),
-        example_line("lore search mirror", "Search titles and bodies"),
+        example_line("record search mirror", "Search titles and bodies"),
+        example_line("lore", "Alias — same as record"),
         gap=0,
     )
 
@@ -496,11 +497,12 @@ def _manual_quick_ref(kinds: str) -> str:
             ],
         ),
         _help_section(
-            "Lore",
+            "Records",
             [
-                ("lore", "Revisions for this place"),
-                ("lore add …", "title | body  (or body alone)"),
-                ("lore search …", "Search lore text"),
+                ("record", "Records for this place"),
+                ("record add …", "title | body  (or body alone)"),
+                ("record search …", "Search record text"),
+                ("lore", "Alias for record"),
             ],
         ),
         _help_section(

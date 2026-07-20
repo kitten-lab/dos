@@ -115,7 +115,7 @@ class InstanceDescLoreTests(unittest.TestCase):
 
         # examine signals related lore on A (shallow = count, not body)
         ex_a = plain(dispatch(self.world, "examine coin alpha").message)
-        self.assertRegex(ex_a.lower(), r"2 related lore|lore revision")
+        self.assertRegex(ex_a.lower(), r"2 related lore|record")
         self.assertNotIn("Alpha only lore.", ex_a)
         ex_b = plain(dispatch(self.world, "examine coin beta").message)
         # beta may still show 0 or only ven lore — not Alpha's instance rows
@@ -152,7 +152,7 @@ class InstanceDescLoreTests(unittest.TestCase):
         )
         self.assertTrue(r.ok, msg=r.message)
         shallow = plain(dispatch(self.world, "look").message)
-        self.assertRegex(shallow.lower(), r"lore revision")
+        self.assertRegex(shallow.lower(), r"record")
         self.assertNotIn("raised for travelers", shallow.lower())
         deep = plain(dispatch(self.world, "look --deep").message)
         self.assertIn("Founding", deep)

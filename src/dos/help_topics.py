@@ -27,7 +27,7 @@ _TOPIC_ALIASES: dict[str, tuple[str, ...]] = {
     "talk": ("talk",),
     "dialogs": ("dialogs", "dialog"),
     "book": ("book", "read", "folio"),
-    "lore": ("lore",),
+    "record": ("record", "records", "lore"),
     "dig": ("dig",),
     "link": ("link", "unlink", "delink"),
     "@desc": ("@desc", "desc"),
@@ -110,11 +110,11 @@ _HELP_INDEX_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ],
     ),
     (
-        "LORE",
+        "RECORDS",
         [
-            ("wiki", "VEN/instance dossier (notes=lore, sub-links)"),
+            ("wiki", "VEN/instance dossier (notes=records, sub-links)"),
             ("folio", "Folio open/read · leaves · soft TUI reader (book)"),
-            ("lore", "Place lore; lore ven … for VEN lore"),
+            ("record", "Place records; record ven … for prime records"),
         ],
     ),
     (
@@ -123,7 +123,7 @@ _HELP_INDEX_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
             ("dig", "Create a place [realm …] [timeline …]"),
             ("link", "Connect / rename / unlink paths between places"),
             ("@desc", "Place or instance description (@desc on <item>)"),
-            ("studio-text", "Opt-in markup for desc / lore (bold, rules, fences)"),
+            ("studio-text", "Opt-in markup for desc / records (bold, rules, fences)"),
             ("text", "Editor save history (text log / show / restore)"),
         ],
     ),
@@ -305,7 +305,7 @@ def _init_topics() -> None:
                 "and presence by *placement* (not kind). "
                 "Loose items land under Here; each bin VEN is its own bucket "
                 "with shallow (first-level) kids — empty bins still show. "
-                "With --deep: one more layer inside those bins + full place lore. "
+                "With --deep: one more layer inside those bins + full place records. "
                 "With a target, same as examine — English glue works: "
                 "look at door, look in drawer, look on table, look inside pack."
             ),
@@ -313,7 +313,7 @@ def _init_topics() -> None:
             fmt.example_line("look", "Room + Here + bin buckets"),
             fmt.example_line(
                 "look --deep",
-                "Bins open one layer deeper + full place lore",
+                "Bins open one layer deeper + full place records",
             ),
             fmt.example_line("look deep", "Same (trailing deep)"),
             fmt.example_line("look at brass-door", "Examine (also: look door)"),
@@ -327,7 +327,7 @@ def _init_topics() -> None:
             ),
             fmt.example_line(
                 "look --deep at table",
-                "Examine target with full lore",
+                "Examine target with full records",
             ),
             fmt.example_line("l", "Short alias"),
             fmt.hint(
@@ -597,8 +597,8 @@ def _init_topics() -> None:
                 "Inspect a thing here or in inventory: description, ids, placement. "
                 "Loose contents under Here; each nested bin opens as a named "
                 "bucket with its first-level kids (empty bins still show). "
-                "On people: last dialog teaser, related lore counts. "
-                "With --deep / deep: one more layer inside those bins, full lore "
+                "On people: last dialog teaser, related records counts. "
+                "With --deep / deep: one more layer inside those bins, full records "
                 "bodies, and deeper composition. "
                 "Also: examine realm / examine timeline for the place you stand in."
             ),
@@ -621,7 +621,7 @@ def _init_topics() -> None:
             _p(
                 "Open a dossier for a real prime VEN or instance — not a second folio. "
                 "In the TUI, opens the soft reader (same frame as folio). "
-                "Shows identity, description, tags, notes (lore), instances, and "
+                "Shows identity, description, tags, notes (records), instances, and "
                 "sub-links. Only names that resolve to actual entities open a page. "
                 "In studio text, write [[Name]]; open with wiki Name."
             ),
@@ -639,7 +639,7 @@ def _init_topics() -> None:
             ),
             fmt.example_line("wiki unlink Desire to Return cartographer"),
             fmt.section("Notes & folios"),
-            fmt.hint("Notes = lore ven … add / lore on <instance> add"),
+            fmt.hint("Notes = record ven … add / record on <instance> add"),
             fmt.hint("Folios: wiki shows meta; read leaves with folio open …"),
             fmt.hint("TUI: Esc closes the wiki reader  ·  link/unlink stay in the log"),
             fmt.hint("No auto-create on missing [[links]]; no multi-page wiki articles."),
@@ -658,7 +658,7 @@ def _init_topics() -> None:
             _p(
                 "Start a back-and-forth dialog with a person present here. "
                 "Each line is a turn (alternating you and them) until you type /fin. "
-                "Optional title and when-stamp work like lore. "
+                "Optional title and when-stamp work like records. "
                 "Mid-dialog, replace the when-stamp with /when …"
             ),
             fmt.section("Usage"),
@@ -681,7 +681,7 @@ def _init_topics() -> None:
             fmt.example_line("/when @1704067200", "Unix/date stamp"),
             fmt.example_line("/when clear", "Remove when-stamp"),
             fmt.hint("In dialog: type lines · /you … · /them … · /when … · /fin to end"),
-            fmt.hint("On /fin: transcript is saved with the current when; lore notes both characters."),
+            fmt.hint("On /fin: transcript is saved with the current when; records note both characters."),
         ),
         "dialogs": _page(
             "dialogs",
@@ -780,129 +780,130 @@ def _init_topics() -> None:
             ),
             fmt.hint("Studio Text in a leaf: help studio-text"),
         ),
-        "lore": _page(
-            "lore",
+        "record": _page(
+            "record",
             _p(
-                "Lore is an append-only revision log. By default it attaches to the "
-                "place instance you stand in. Attach lore to any instance "
-                "(item, person, …) with lore on <match> — no elevate required. "
-                "Prime VEN lore (lore ven …) is canon across all instances. "
-                "Optional when-stamps set the in-world/mythic/event time; the wall-clock "
-                "moment you typed is always kept separately as typed … "
-                "Ending a talk with /fin also writes a dialog lore note."
+                "Records are an append-only revision log for the office. By default "
+                "they attach to the place instance you stand in. Attach a record to "
+                "any instance (item, person, …) with record on <match> — no elevate "
+                "required. Prime VEN records (record ven …) are canon across all "
+                "instances. Optional when-stamps set story/event time; the wall-clock "
+                "moment you typed is always kept separately. "
+                "Ending a talk with /fin also writes a dialog record note. "
+                "Alias: lore still works (same command)."
             ),
             fmt.section("Current place"),
-            fmt.example_line("lore", "List revisions for this place"),
+            fmt.example_line("record", "List records for this place"),
             fmt.section("Flags (free order)"),
             fmt.example_line(
-                "lore -a -t Founding -b Raised for travelers. -w 0",
+                "record -a -t Founding -b Raised for travelers. -w 0",
                 "-a add · -t title · -b body · -w when",
             ),
             fmt.example_line(
-                'lore --add --on me -n Note -d "Soft light." --when 1',
+                'record --add --on me -n Note -d "Soft light." --when 1',
                 "Target with --on; -d same as -b",
             ),
             fmt.example_line(
-                "lore on cartographer -a -t Whisper -b Heard at dusk.",
+                "record on cartographer -a -t Whisper -b Heard at dusk.",
                 "Instance then flags",
             ),
             fmt.hint(
                 "-a/--add required for flag form. "
                 "Title: -t/-n · Body: -b/-d · When: -w. "
-                "Prose lore add … still works."
+                "Prose record add … still works."
             ),
             fmt.section("Prose (still works)"),
             fmt.example_line(
-                "lore add Founding | Raised for market travelers.",
+                "record add Founding | Raised for market travelers.",
                 "Title | body  (title optional)",
             ),
-            fmt.example_line("lore add Just a body with no title."),
+            fmt.example_line("record add Just a body with no title."),
             fmt.example_line(
-                "lore add when Before the Roads | Founding | Raised for travelers.",
+                "record add when Before the Roads | Founding | Raised for travelers.",
                 "Mythic when-stamp + title + body",
             ),
             fmt.example_line(
-                "lore add @2024-06-15 14:30 | Eclipse note | The glass dimmed.",
+                "record add @2024-06-15 14:30 | Eclipse note | The glass dimmed.",
                 "Date/time stamp (free text)",
             ),
             fmt.example_line(
-                "lore add @1704067200 | Signal | A unix-style event stamp.",
+                "record add @1704067200 | Signal | A unix-style event stamp.",
                 "Unix-style stamp as free text",
             ),
             fmt.example_line(
-                r"lore add Note | Line one.\nLine two.",
+                r"record add Note | Line one.\nLine two.",
                 "\\n in body becomes a real line break (same as @desc)",
             ),
             fmt.example_line(
-                "lore add from field-notes 1:2",
+                "record add from field-notes 1:2",
                 "Stamp place lore from folio leaf 1 line 2 (title cites p1:2)",
             ),
             fmt.example_line(
-                "lore add from field-notes p1:3 | Quoted fragment",
+                "record add from field-notes p1:3 | Quoted fragment",
                 "Same with optional title override",
             ),
             fmt.hint(
-                "Folio leaf/line edits and lore add (including from folio) support undo."
+                "Folio leaf/line edits and record add (including from folio) support undo."
             ),
             fmt.section("Any instance (item / person / …)"),
-            fmt.example_line("lore on quill", "List lore on this copy only"),
+            fmt.example_line("record on quill", "List record on this copy only"),
             fmt.example_line(
-                "lore on quill add Bent nib | From last winter’s drafts.",
-                "Add instance lore (not shared with other spawns)",
+                "record on quill add Bent nib | From last winter’s drafts.",
+                "Add instance records (not shared with other spawns)",
             ),
             fmt.section("Current realm / timeline layers"),
             fmt.example_line(
-                "lore on realm",
-                "Lore on the realm of the place you stand in",
+                "record on realm",
+                "Records on the realm of the place you stand in",
             ),
             fmt.example_line(
-                "lore on timeline",
-                "Lore on this place's timeline layer",
+                "record on timeline",
+                "Records on this place's timeline layer",
             ),
             fmt.example_line(
-                "lore on realm add Bound | The soft edge of Unformed.",
+                "record on realm add Bound | The soft edge of Unformed.",
             ),
-            fmt.example_line("lore realm", "Shorthand for lore on realm"),
+            fmt.example_line("record realm", "Shorthand for record on realm"),
             fmt.example_line(
-                "lore on Unformed",
+                "record on Unformed",
                 "Named layer by realm/timeline name when unique",
             ),
             fmt.example_line(
-                "lore on quill add when Before the Roads | Origin | Gifted at the hearth.",
-                "When-stamp on instance lore",
+                "record on quill add when Before the Roads | Origin | Gifted at the hearth.",
+                "When-stamp on instance records",
             ),
             fmt.example_line(
-                "lore on quill#0002 add Note | Only this short-ref copy.",
+                "record on quill#0002 add Note | Only this short-ref copy.",
                 "Target a specific instance of a prime",
             ),
             fmt.example_line(
-                "lore add studio | Note | **Bold** body\\n---\\nMore layout.",
-                "Studio Text lore body (help studio-text)",
+                "record add studio | Note | **Bold** body\\n---\\nMore layout.",
+                "Studio Text record body (help studio-text)",
             ),
             fmt.example_line(
-                "lore add Founding <<studio",
-                "Buffer editor for a multi-line lore body",
+                "record add Founding <<studio",
+                "Buffer editor for a multi-line record body",
             ),
             fmt.example_line(
-                "lore on quill add <<studio",
-                "Editor lore on an instance",
+                "record on quill add <<studio",
+                "Editor record on an instance",
             ),
-            fmt.example_line("lore search mirror", "Search all lore text"),
+            fmt.example_line("record search mirror", "Search all record text"),
             fmt.section("Prime VEN"),
             fmt.example_line(
-                "lore ven SILVER-THREAD",
-                "List lore on a VEN (cute slug or relaxed name)",
+                "record ven SILVER-THREAD",
+                "List records on a VEN (cute slug or relaxed name)",
             ),
             fmt.example_line(
-                "lore ven SILVER-THREAD add Motif | Binds what timelines fray.",
+                "record ven SILVER-THREAD add Motif | Binds what timelines fray.",
                 "Add a revision on that VEN",
             ),
             fmt.example_line(
-                "lore ven silver thread add when First Binding | Motif | Ties fray.",
-                "VEN lore with a mythic stamp",
+                "record ven silver thread add when First Binding | Motif | Ties fray.",
+                "VEN records with a mythic stamp",
             ),
             fmt.example_line(
-                "lore ven silver thread add | Body only.",
+                "record ven silver thread add | Body only.",
                 "Relaxed typing still resolves when unique",
             ),
         ),
@@ -963,7 +964,7 @@ def _init_topics() -> None:
             fmt.example_line("timeline clear", "Remove timeline from current place"),
             fmt.example_line("timeline here", "Same as locate self"),
             fmt.section("Review current layer"),
-            fmt.example_line("lore on timeline", "List lore on this place's timeline"),
+            fmt.example_line("record on timeline", "List records on this place's timeline"),
             fmt.example_line("examine timeline", "Desc + meta for the layer"),
             fmt.example_line("@desc on timeline", "Show/set timeline description"),
             fmt.section("See also"),
@@ -987,7 +988,7 @@ def _init_topics() -> None:
             fmt.example_line("realm set MATERIAL on Mirror Box"),
             fmt.example_line("realm clear"),
             fmt.section("Review current layer"),
-            fmt.example_line("lore on realm", "List lore on this place's realm"),
+            fmt.example_line("record on realm", "List records on this place's realm"),
             fmt.example_line("examine realm", "Desc + meta for the layer"),
             fmt.example_line("@desc on realm", "Show/set realm description"),
             fmt.section("See also"),
@@ -1028,7 +1029,7 @@ def _init_topics() -> None:
                 "Clear removes the instance override so the prime VEN text returns. "
                 "Edits do not write material history until you @desc commit "
                 "(optional when @N) — then a desc history row, text-log snapshot, "
-                "and a lore entry with the full description text. "
+                "and a record entry with the full description text. "
                 "Use \\n for line breaks, or @desc << multiline ended with a lone ."
             ),
             fmt.section("Current place"),
@@ -1036,7 +1037,7 @@ def _init_topics() -> None:
             fmt.example_line("@desc Soft light on unfinished canvases."),
             fmt.example_line(
                 "@desc commit",
-                "Stamp history + lore (title: description update)",
+                "Stamp history + records (title: description update)",
             ),
             fmt.example_line(
                 "@desc commit -t Soft dusk when @2",
@@ -1044,7 +1045,7 @@ def _init_topics() -> None:
             ),
             fmt.example_line(
                 "@desc commit on me --title Portrait note",
-                "Instance desc + titled lore",
+                "Instance desc + titled record",
             ),
             fmt.example_line(
                 r"@desc First line.\nSecond line.",
@@ -1100,7 +1101,7 @@ def _init_topics() -> None:
         "studio-text": _page(
             "studio-text",
             _p(
-                "Studio Text is an opt-in markup for descriptions and lore. "
+                "Studio Text is an opt-in markup for descriptions and records. "
                 "Plain text (default) is fully escaped. Studio bodies start with "
                 ".format: studio in storage and render through a whitelist only — "
                 "no raw Rich injection."
@@ -1113,10 +1114,10 @@ def _init_topics() -> None:
                 "Multiline; live line echo; undo/u = last line",
             ),
             fmt.example_line(
-                "lore add studio | Note | **Bold** body with a rule:\\n---\\nMore.",
+                "record add studio | Note | **Bold** body with a rule:\\n---\\nMore.",
             ),
             fmt.example_line(
-                "lore on quill add studio | Seed | ```seed\\nliteral dots.....\\n```",
+                "record on quill add studio | Seed | ```seed\\nliteral dots.....\\n```",
             ),
             fmt.section("Dialect"),
             fmt.hint("# Title (yellow)   ## Section   ### Dim heading"),
@@ -1146,14 +1147,14 @@ def _init_topics() -> None:
             _p(
                 "Unknown [brackets] and unknown {color} names in free text are escaped. "
                 "Only the Studio Text whitelist emits markup (emphasis, colors, fences). "
-                "Folio leaves use the same dialect as @desc / lore."
+                "Folio leaves use the same dialect as @desc / record."
             ),
         ),
         "undo": _page(
             "undo",
             _p(
                 "Undo the last successful builder mutation in this session "
-                "(descriptions, dig, link, take/drop, create, spawn, lore, "
+                "(descriptions, dig, link, take/drop, create, spawn, record, "
                 "folio page/line edits, incomplete/complete, …). "
                 "Not navigation (go). Not saved across restarts."
             ),
@@ -1208,19 +1209,19 @@ def _init_topics() -> None:
             _p(
                 "Every successful << / <<studio buffer save appends a full-body "
                 "snapshot (git-style log). List, inspect, or restore prior saves. "
-                "Works for descriptions, folio leaves, and lore editor saves."
+                "Works for descriptions, folio leaves, and record editor saves."
             ),
             fmt.section("Usage"),
             fmt.example_line("text log", "Place description saves"),
             fmt.example_line("text log on quill", "Instance description saves"),
             fmt.example_line("text log book field-notes page 1", "Also: folio …"),
-            fmt.example_line("text log lore", "Lore bodies from the editor"),
+            fmt.example_line("text log record", "Record bodies from the editor"),
             fmt.example_line("text show trev_…", "Full snapshot"),
             fmt.example_line("text restore trev_…", "Write snapshot back live"),
             fmt.section("Open the editor"),
             fmt.example_line("@desc <<studio"),
             fmt.example_line("folio page add notes Chapter <<studio"),
-            fmt.example_line("lore add Founding <<studio"),
+            fmt.example_line("record add Founding <<studio"),
             fmt.hint(
                 "In the editor: F2/Alt+P preview · Ctrl+S save · Esc / Ctrl+Q cancel"
             ),
@@ -1283,7 +1284,7 @@ def _init_topics() -> None:
                 "Craft time is always stored separately on each row. "
                 "Each act gets a shared event code (HST-001, …) so put on hope and "
                 "receive on the vessel show the same code. "
-                "Create/spawn/lore and movement (take / drop / put) write life-of-item rows. "
+                "Create/spawn/record and movement (take / drop / put) write life-of-item rows. "
                 "Spawn onto the floor also records on the place; take/drop also on you "
                 "and the room. Prefer --when 0; trailing when @0 also works. "
                 "Not the multiverse timeline layer command — this is material history."
@@ -1306,7 +1307,7 @@ def _init_topics() -> None:
                 "take · give · receive (you)",
             ),
             fmt.example_line(
-                "lore add Note | Body. when @0",
+                "record add Note | Body. when @0",
                 "Lore: freeform stamp and/or when @N",
             ),
             fmt.section("List"),
@@ -1646,7 +1647,7 @@ def _init_topics() -> None:
             fmt.example_line("help"),
             fmt.example_line("?"),
             fmt.example_line("help look"),
-            fmt.example_line("help lore"),
+            fmt.example_line("help record"),
         ),
         "quit": _page(
             "quit",
@@ -1673,7 +1674,7 @@ def _init_topics() -> None:
                 "Links — typed paths between places (spatial, dimensional, temporal, …).",
                 "Realm / timeline — dimensional and temporal layers on instances; "
                 "coords read as REALM / TIMELINE.",
-                "Lore — revision history on a place instance or on a prime VEN.",
+                "Records — revision history on a place instance or on a prime VEN.",
                 "Folio — ordered leaves (chapters); open with folio open …",
             ),
             fmt.section("See also"),
@@ -1682,7 +1683,7 @@ def _init_topics() -> None:
             fmt.example_line("help folio"),
             fmt.example_line("help timeline"),
             fmt.example_line("help realm"),
-            fmt.example_line("help lore"),
+            fmt.example_line("help record"),
             fmt.example_line("help elevate"),
             fmt.example_line("help compose"),
             fmt.example_line("help lineage"),

@@ -126,7 +126,7 @@ def dispatch(world: World, line: str) -> CommandResult:
             return CommandResult(True, _talk(world, arg))
         if cmd in ("dialogs", "dialog"):
             return CommandResult(True, _dialogs(world, arg))
-        if cmd == "lore":
+        if cmd in ("record", "records", "lore"):
             return CommandResult(True, _lore(world, arg))
         if cmd in ("folio", "book"):
             # folio is the product verb; book remains a full alias
@@ -802,11 +802,11 @@ def _peel_look_target(arg: str) -> str:
 
 def _look(world: World, arg: str = "") -> str:
     """
-    look                 — room view (lore count hint if any)
-    look deep / --deep   — room view + bin contents one layer deeper + full place lore
+    look                 — room view (record count hint if any)
+    look deep / --deep   — room view + bin contents one layer deeper + full place records
     look at|in|on X      — same as examine X (also into/inside/onto/…)
-    look [--deep] at X   — examine X with full lore / deeper bins
-    look X deep          — examine X with full lore + deeper bins
+    look [--deep] at X   — examine X with full records / deeper bins
+    look X deep          — examine X with full records + deeper bins
     """
     from .wiki import parse_deep_flag
 
@@ -845,12 +845,12 @@ def _look(world: World, arg: str = "") -> str:
     lore_rows = list(info["lore"] or [])
     if deep:
         if lore_rows:
-            lore_block = _format_lore_rows(f"Lore · {loc.name}", lore_rows)
+            lore_block = _format_lore_rows(f"Records · {loc.name}", lore_rows)
         else:
-            lore_block = fmt.hint("No lore revisions for this place.")
+            lore_block = fmt.hint("No records for this place.")
     elif lore_rows:
         n = len(lore_rows)
-        lore_block = fmt.hint(f"{n} lore revision(s) — type lore  ·  look --deep")
+        lore_block = fmt.hint(f"{n} record(s) — type record  ·  look --deep")
 
     head = fmt.join_blocks(header, session_line, gap=0)
     return fmt.join_blocks(
@@ -2165,8 +2165,8 @@ def _push_book_page_delete_undo(
 
 def _examine(world: World, arg: str, *, deep: bool | None = None) -> str:
     """
-    examine <thing>           — detail; lore count hint
-    examine --deep <thing>    — same + full lore bodies (+ deeper compose)
+    examine <thing>           — detail; record count hint
+    examine --deep <thing>    — same + full records bodies (+ deeper compose)
     in deep at <thing>        — aliases: exam, inspect, in
     """
     from .wiki import parse_deep_flag
@@ -2275,12 +2275,12 @@ def _examine(world: World, arg: str, *, deep: bool | None = None) -> str:
     lore_block = None
     if deep:
         if lore_rows:
-            lore_block = _format_lore_rows(f"Lore · {thing.name}", lore_rows)
+            lore_block = _format_lore_rows(f"Records · {thing.name}", lore_rows)
         else:
-            lore_block = fmt.hint("No related lore revisions.")
+            lore_block = fmt.hint("No related records.")
     elif lore_rows:
         lore_block = fmt.hint(
-            f"{len(lore_rows)} related lore revision(s)  ·  examine --deep {thing.name}"
+            f"{len(lore_rows)} related record(s)  ·  examine --deep {thing.name}"
         )
 
     # Technical ids last — not between context and prose
@@ -2383,7 +2383,7 @@ def _wiki(world: World, arg: str) -> CommandResult:
     wiki unlink <from> <to>
 
     Dossier for a real VEN or instance (not a book page editor).
-    Notes = lore. Sub-links = meta wiki_links (ven ids only).
+    Notes = records. Sub-links = meta wiki_links (ven ids only).
     Trailing ``deep`` expands nested composition.
     TUI opens the soft reader (same frame as folio); message is the full dossier
     for REPL / print path.
@@ -2596,7 +2596,7 @@ def _finish_dialog(world: World) -> str:
     row = world.get_dialog(did)
     dslug = world.dialog_slug_of(row) if row else did
 
-    # Lore note: dialog took place between the two characters
+    # Record note: dialog took place between the two characters
     lore_title = f"Dialog · {title}"
     lore_body = (
         f"A dialog took place between {sess.player_name} and {sess.partner_name}.\n"
@@ -2627,7 +2627,7 @@ def _finish_dialog(world: World) -> str:
     return fmt.join_blocks(
         fmt.ok(f"Dialog ended · {title}"),
         fmt.hint(
-            f"saved {dslug}  ·  lore noted for {sess.player_name} & {sess.partner_name}"
+            f"saved {dslug}  ·  record noted for {sess.player_name} & {sess.partner_name}"
         ),
         fmt.hint(
             f"Re-read:  dialogs  ·  dialogs show {dslug}  ·  dialogs show 1"
@@ -3605,15 +3605,15 @@ def _parse_lore_title_body(rest: str) -> tuple[str, str] | None:
 
 def parse_lore_add(rest: str) -> tuple[str, str, str | None] | None:
     """
-    Parse lore add payload → (title, body, when_label).
+    Parse record add payload → (title, body, when_label).
 
     Optional author when-stamp (mythic / date / unix free text), kept separate
     from wall-clock created_at:
 
-      lore add when <stamp> | [title |] body
-      lore add @<stamp> | [title |] body
-      lore add [title |] body          # no stamp
-      lore add studio | [title |] body # Studio Text body
+      record add when <stamp> | [title |] body
+      record add @<stamp> | [title |] body
+      record add [title |] body          # no stamp
+      record add studio | [title |] body # Studio Text body
 
     Examples:
       when Before the Roads | Founding | Raised for travelers.
@@ -3736,7 +3736,7 @@ def _story_when_for_lore_label(when_label: str | None) -> tuple[str, int | None]
 
 
 def _indent_lore_body(markup: str, *, spaces: int = 2) -> str:
-    """Pad each line of lore body two spaces past the title column."""
+    """Pad each line of record body two spaces past the title column."""
     pad = " " * max(0, spaces)
     if not markup:
         return markup
@@ -3789,7 +3789,7 @@ def _format_dialog_lore_entry(row) -> str:
 
 def _format_lore_rows(heading: str, rows: list) -> str:
     if not rows:
-        return fmt.hint(f"No lore revisions yet for {heading}.")
+        return fmt.hint(f"No records yet for {heading}.")
     # heading may include slug; title_line display_name's cute segments in the name part
     blocks: list[str] = [fmt.title_line(heading)]
     for r in rows:
@@ -3816,7 +3816,7 @@ _LORE_ADD_USAGE = (
     "       lore add Founding | Raised for travelers.\n"
     "       lore add from field-notes 1:2\n"
     "       lore add from field-notes p1:3 | Optional title\n"
-    "       lore on <item>  ·  lore on <item> add [when … |] [title |] body"
+    "       record on <item>  ·  record on <item> add [when … |] [title |] body"
 )
 
 
@@ -3995,20 +3995,20 @@ def _lore_add_from_book(world: World, rest: str) -> str:
         lambda w, lid=lid: w.delete_lore(lid),
     )
     return fmt.ok(
-        f"Lore from book · {default_title} → place  ·  {lid}"
+        f"Record from book · {default_title} → place  ·  {lid}"
     )
 
 
 def _lore_on_instance(world: World, rest: str) -> str:
     """
-    lore on <instance>
-    lore on <instance> add [when … |] [title |] body
+    record on <instance>
+    record on <instance> add [when … |] [title |] body
     """
     rest = rest.strip()
     if not rest:
         return fmt.hint(
-            "Usage: lore on <item|person|realm|timeline>  ·  "
-            "lore on <match> add [when <stamp> |] [title |] body"
+            "Usage: record on <item|person|realm|timeline>  ·  "
+            "record on <match> add [when <stamp> |] [title |] body"
         )
     lower = rest.lower()
     if " add " in lower:
@@ -4021,7 +4021,7 @@ def _lore_on_instance(world: World, rest: str) -> str:
         parsed = parse_lore_add(add_rest)
         if not parsed:
             return fmt.hint(
-                "Usage: lore on <match> add [when <stamp> | | @stamp |] "
+                "Usage: record on <match> add [when <stamp> | | @stamp |] "
                 "[title |] body  [when @N]"
             )
         title, body, when_label = parsed
@@ -4042,7 +4042,7 @@ def _lore_on_instance(world: World, rest: str) -> str:
             author="builder",
         )
         world.undo_stack.push(
-            f"lore on {thing.name}",
+            f"record on {thing.name}",
             lambda w, lid=lid: w.delete_lore(lid),
         )
         _record_subject_history(
@@ -4059,7 +4059,7 @@ def _lore_on_instance(world: World, rest: str) -> str:
         stamp_note = f"  ·  {when_label}" if when_label else ""
         ref = world.short_ref_of(thing.id)
         return fmt.ok(
-            f"Lore on instance · {fmt.named_ref(thing.name, ref)}  ·  "
+            f"Record on instance · {fmt.named_ref(thing.name, ref)}  ·  "
             f"{lid}{stamp_note}  ·  story {sw}"
         )
 
@@ -4074,7 +4074,7 @@ def _lore_on_instance(world: World, rest: str) -> str:
             fmt.title_line(heading),
             fmt.hint(
                 "No instance lore yet.  "
-                f"lore on {thing.name} add Title | body  ·  "
+                f"record on {thing.name} add Title | body  ·  "
                 "does not require elevate"
             ),
             gap=0,
@@ -4088,7 +4088,7 @@ def _lore_add_flags(world: World, arg: str) -> str:
 
       lore -a -t Founding -b Raised for travelers. -w 0
       lore --add --on cartographer -n Note -d Soft light. --when 1
-      lore on quill -a -t Note -b Bent nib.
+      record on quill -a -t Note -b Bent nib.
 
     -a / --add is required. Title: -t/-n/--title/--name.
     Body: -b/--body or -d/--desc. When: -w/--when.
@@ -4098,12 +4098,12 @@ def _lore_add_flags(world: World, arg: str) -> str:
     from .studio_text import prepare_stored_text
 
     raw = (arg or "").strip()
-    # lore on <match> -a …
+    # record on <match> -a …
     if raw.lower().startswith("on "):
         thing, rest, err = _split_instance_target_and_rest(world, raw[3:])
         if err or thing is None:
             return err or fmt.hint(
-                "Usage: lore on <match> -a -t <title> -b <body> [-w N]"
+                "Usage: record on <match> -a -t <title> -b <body> [-w N]"
             )
         target_inst = thing
         flag_src = rest
@@ -4116,7 +4116,7 @@ def _lore_add_flags(world: World, arg: str) -> str:
         return fmt.err(parsed.error)
     if "add" not in parsed.flags:
         return fmt.hint(
-            "Lore flags need -a / --add to create an entry.\n"
+            "Record flags need -a / --add to create an entry.\n"
             "  lore -a -t Founding -b Raised for travelers. -w 0\n"
             "  lore --add --on me -n Note -d Soft light.\n"
             "  Prose still works: lore add Title | body"
@@ -4188,7 +4188,7 @@ def _lore_add_flags(world: World, arg: str) -> str:
     ref = world.short_ref_of(target_inst.id)
     stamp_note = f"  ·  {when_label}" if when_label else ""
     return fmt.ok(
-        f"Lore · {fmt.named_ref(display_name(target_inst.name), ref)}  ·  "
+        f"Records · {fmt.named_ref(display_name(target_inst.name), ref)}  ·  "
         f"{lid}{stamp_note}  ·  story {story_when}"
     )
 
@@ -4203,9 +4203,9 @@ def _lore(world: World, arg: str) -> str:
       lore search <q>
 
     Any instance (item/person/place copy — no elevate required):
-      lore on <match>
-      lore on <match> add [when … |] [title |] body
-      lore on <match> -a -t … -b …
+      record on <match>
+      record on <match> add [when … |] [title |] body
+      record on <match> -a -t … -b …
       lore --add --on <match> …
 
     Prime VEN:
@@ -4216,11 +4216,11 @@ def _lore(world: World, arg: str) -> str:
 
     arg = arg.strip()
 
-    # Flag form (free order): lore -a …  ·  lore on x -a …
+    # Flag form (free order): record -a …  ·  lore on x -a …
     if looks_like_flag_command(arg):
         return _lore_add_flags(world, arg)
 
-    # Shorthand: lore realm … → lore on realm …
+    # Shorthand: record realm … → lore on realm …
     low0 = arg.lower()
     if low0 == "realm" or low0.startswith("realm "):
         return _lore(world, "on " + arg)
@@ -4280,7 +4280,7 @@ def _lore(world: World, arg: str) -> str:
             )
             stamp_note = f"  ·  {when_label}" if when_label else ""
             return fmt.ok(
-                f"Lore on VEN · {ven.name} ({ven.slug}) · {lid}"
+                f"Record on VEN · {ven.name} ({ven.slug}) · {lid}"
                 f"{stamp_note}  ·  story {sw}"
             )
         # list
@@ -4338,7 +4338,7 @@ def _lore(world: World, arg: str) -> str:
         )
         stamp_note = f"  ·  {when_label}" if when_label else ""
         return fmt.ok(
-            f"Lore revision recorded · {lid}{stamp_note}  ·  story {sw}"
+            f"Record filed · {lid}{stamp_note}  ·  story {sw}"
         )
 
     if arg.lower().startswith("search "):
@@ -4346,7 +4346,7 @@ def _lore(world: World, arg: str) -> str:
         rows = world.search_lore(q)
         if not rows:
             return fmt.hint("No lore matches.")
-        lines = [fmt.section(f"Lore matching “{q}”")]
+        lines = [fmt.section(f"Records matching “{q}”")]
         for r in rows:
             title = r["title"] or "(untitled)"
             snippet = (r["body"] or "")[:80]
@@ -4356,7 +4356,7 @@ def _lore(world: World, arg: str) -> str:
 
     if arg:
         return fmt.hint(
-            "Usage: lore  |  lore add …  |  lore on <item|realm|timeline> …  |  "
+            "Usage: record  |  record add …  |  record on <item|realm|timeline> …  |  "
             "lore ven <slug> …  |  lore search …"
         )
 
@@ -4367,7 +4367,7 @@ def _lore(world: World, arg: str) -> str:
     if not rows:
         return fmt.hint(
             "No lore for this place yet.  Use: lore add <body>  ·  "
-            "lore on <item> add …  ·  help lore"
+            "record on <item> add …  ·  help record"
         )
     return _format_lore_rows(loc.name, rows)
 
@@ -5142,8 +5142,10 @@ def _resolve_text_log_target(
             "body",
             f"book · {display_name(book.name)} p{page_n}",
         )
-    if low.startswith("lore"):
-        rest2 = raw[4:].strip()
+    if low.startswith("lore") or low.startswith("record"):
+        # strip leading verb (lore / record / records)
+        rest2 = raw.split(maxsplit=1)
+        rest2 = rest2[1].strip() if len(rest2) > 1 else ""
         if rest2.lower().startswith("on "):
             thing = world.resolve_here_named(rest2[3:].strip())
             if not thing:
@@ -5152,7 +5154,7 @@ def _resolve_text_log_target(
                 "instance",
                 thing.id,
                 "lore_body",
-                f"lore · {display_name(thing.name)}",
+                f"record · {display_name(thing.name)}",
             )
         loc = world.player_location()
         if not loc:
@@ -5161,7 +5163,7 @@ def _resolve_text_log_target(
             "instance",
             loc.id,
             "lore_body",
-            f"lore · {display_name(loc.name)}",
+            f"record · {display_name(loc.name)}",
         )
     thing = world.resolve_here_named(raw)
     if thing:

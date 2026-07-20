@@ -32,7 +32,7 @@ class CurrentLayerAccessTests(unittest.TestCase):
             "lore on realm add Soft Edge | The membrane between nodes.",
         )
         self.assertTrue(add.ok, msg=add.message)
-        self.assertIn("Lore on instance", plain(add.message))
+        self.assertIn("Record on instance", plain(add.message))
 
         listed = dispatch(self.world, "lore on realm")
         self.assertTrue(listed.ok, msg=listed.message)
@@ -79,7 +79,10 @@ class CurrentLayerAccessTests(unittest.TestCase):
     def test_look_hints_layer_lore(self) -> None:
         look = plain(dispatch(self.world, "look").message)
         # Place lore count; layer lore is via lore on realm / timeline
-        self.assertIn("lore", look.lower())
+        self.assertTrue(
+            "record" in look.lower() or "lore" in look.lower(),
+            msg=look,
+        )
 
     def test_named_layer_still_works(self) -> None:
         # story seed has realm Woven
