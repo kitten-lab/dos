@@ -18,8 +18,8 @@ from digital_office_spaces.ids import (
     normalize_formal_name,
     normalize_instance_title,
 )
-from digital_office_spaces.seed import seed_world_classic as seed_world
-from digital_office_spaces.seed import seed_world_story
+from wbs_seed_fixtures import seed_world_classic as seed_world
+from wbs_seed_fixtures import seed_world_story
 from digital_office_spaces.world import World
 
 CUTE = re.compile(r"^[A-Z0-9]+(-[A-Z0-9]+)*$")

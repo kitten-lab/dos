@@ -10,7 +10,7 @@ from digital_office_spaces.book import parse_book_line_ref
 from digital_office_spaces.commands import dispatch, parse_lore_add
 from digital_office_spaces.db import connect
 from digital_office_spaces.format import plain
-from digital_office_spaces.seed import seed_world_story
+from wbs_seed_fixtures import seed_world_story
 from digital_office_spaces.world import World
 
 

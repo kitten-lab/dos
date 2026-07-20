@@ -16,7 +16,7 @@ from digital_office_spaces.mapview import (
     format_map_tree,
     parse_map_args,
 )
-from digital_office_spaces.seed import seed_world_story
+from wbs_seed_fixtures import seed_world_story
 from digital_office_spaces.world import World
 
 

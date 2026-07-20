@@ -19,7 +19,7 @@ from digital_office_spaces.dialog import (
     parse_when_stamp,
 )
 from digital_office_spaces.format import plain
-from digital_office_spaces.seed import seed_world_story
+from wbs_seed_fixtures import seed_world_story
 from digital_office_spaces.world import World
 
 

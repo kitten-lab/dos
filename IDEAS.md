@@ -4,7 +4,13 @@ Living list of half-finished concepts and polish intents for **Digital Office Sp
 
 **Product lineage (2026-07+):** Branched from **World Builder Studio** (`../world-studio`) as a clean product copy. Sibling trees: **[MIWBS](../miwbs/)**, **[VEN Mentor](../ven-minter/)**. DOS owns the **office collab** cut: shared places, data, schedules, chats for humans + agents.
 
-**Formal product name:** **Digital Office Spaces (DOS)**.  
+**Formal product name:** **Digital Office Spaces (DOS)**.
+
+### Seed doctrine (in the offices)
+
+- Default spawn is **already on a company site** (Wire / Workday) — not a fantasy void or cathedral tour.
+- Product flavors: **office** · **empty** · **bootstrap**. Companies inside the world use this tool; richer multi-tenant / multi-company seeds later.
+- Collab surfaces live **in place** first (books/folios as calendar, channel, handbook); dedicated schedule/chat commands can grow on top.  
 **AIDM** is *not* the app title — future narrative agent; **a-men** ladder: [docs/product-map.md](docs/product-map.md).
 
 **Larger product map (Silo / ADM / AIDM / Forestry / history):** see [docs/product-map.md](docs/product-map.md) — durable doctrine in-repo so it is not lost in chat. Includes **shipped** story-when backbone *and* **parked** extended ideas (bags, visit, fold, lock, event VENs).

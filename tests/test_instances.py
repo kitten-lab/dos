@@ -16,7 +16,7 @@ from digital_office_spaces.ids import (
     parse_instance_ref_token,
     parse_resolve_query,
 )
-from digital_office_spaces.seed import seed_world_story
+from wbs_seed_fixtures import seed_world_story
 from digital_office_spaces.world import World
 
 # Compact instance ref: FOL-001-0001 (VEN code + 4-digit copy)

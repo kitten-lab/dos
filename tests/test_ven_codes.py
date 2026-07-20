@@ -10,7 +10,7 @@ from digital_office_spaces.commands import dispatch
 from digital_office_spaces.db import connect, init_schema
 from digital_office_spaces.format import plain
 from digital_office_spaces.ids import format_ven_code, kind_code_prefix, parse_ven_code
-from digital_office_spaces.seed import seed_world_story
+from wbs_seed_fixtures import seed_world_story
 from digital_office_spaces.world import World
 
 

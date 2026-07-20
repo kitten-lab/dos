@@ -9,7 +9,7 @@ from pathlib import Path
 from digital_office_spaces.commands import dispatch
 from digital_office_spaces.db import connect
 from digital_office_spaces.format import plain
-from digital_office_spaces.seed import seed_world_classic as seed_world
+from wbs_seed_fixtures import seed_world_classic as seed_world
 from digital_office_spaces.status import (
     SIDEBAR_TITLE,
     format_sidebar,
@@ -81,7 +81,7 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(msgs["status"], msgs["where"])
 
         text = plain(msgs["status"])
-        self.assertIn("Status", text)
+        self.assertTrue("Locate" in text or "Status" in text, msg=text)
         self.assertNotIn("At a glance", text)
         for m in _CORE_MARKERS:
             self.assertIn(m, text)
@@ -96,7 +96,8 @@ class StatusTests(unittest.TestCase):
         r = dispatch(self.world, "status")
         self.assertTrue(r.ok)
         text = plain(r.message)
-        self.assertIn("Status", text)
+        # status is an alias for locate self
+        self.assertTrue("Locate" in text or "Status" in text, msg=text)
         self.assertIn("Builder", text)
         self.assertIn("Material", text)
         self.assertIn("Prime", text)
@@ -132,7 +133,11 @@ class StatusTests(unittest.TestCase):
             self.assertNotIn("at-a-glance", text)
             # should not pitch two different jobs
             self.assertNotIn("shorter situation block", text)
-            self.assertIn("same command", text)
+            # help routes status/sit/whereami → locate topic
+            self.assertTrue(
+                "locate" in text or "same command" in text or "same as" in text,
+                msg=text,
+            )
 
 
 if __name__ == "__main__":

@@ -45,12 +45,21 @@ dos --reseed
 
 CLI entry points: `dos`, `digital-office-spaces`, and `python -m digital_office_spaces`.
 
-Default seed is still the inherited **story** world (useful for kernel smoke tests). Office-oriented seeds will land as the product focus hardens.
+### Seeds (you start *inside* the office)
+
+| Flavor | Purpose |
+|--------|---------|
+| **`office`** (default) | Small company campus on the **Wire**: lobby → open floor → meeting room + records. Handbook, team channel, shared calendar, project cabinet — data, schedules, and chats **in place**. |
+| **`empty`** | Unfurnished suite on the wire — one room, whiteboard, no paths. Build the company layout from inside. |
+| **`bootstrap`** | Bare engine kernel (Herenow) for tests — not the product welcome. |
 
 ```powershell
+py -3.12 -m digital_office_spaces --reseed --seed office
+py -3.12 -m digital_office_spaces --reseed --seed empty
 py -3.12 -m digital_office_spaces --reseed --seed bootstrap
-py -3.12 -m digital_office_spaces --reseed --seed void
 ```
+
+You are not outside looking in — **you are already in Digital Office Spaces**, working a company site humans and agents share.
 
 ### Textual TUI
 

@@ -14,7 +14,7 @@ from digital_office_spaces.multiline_open import (
     parse_multiline_opener,
     seed_initial_body,
 )
-from digital_office_spaces.seed import seed_world_story
+from wbs_seed_fixtures import seed_world_story
 from digital_office_spaces.studio_text import is_studio
 from digital_office_spaces.text_editor import (
     _editor_hint_markup,

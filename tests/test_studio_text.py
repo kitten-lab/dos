@@ -9,7 +9,7 @@ from pathlib import Path
 from digital_office_spaces.commands import dispatch
 from digital_office_spaces.db import connect
 from digital_office_spaces.format import plain
-from digital_office_spaces.seed import seed_world_story
+from wbs_seed_fixtures import seed_world_story
 from digital_office_spaces.studio_text import (
     FORMAT_HEADER,
     detect_format,

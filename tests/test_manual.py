@@ -11,7 +11,7 @@ from digital_office_spaces.commands import HELP, dispatch
 from digital_office_spaces.db import connect
 from digital_office_spaces.format import plain
 from digital_office_spaces.help_topics import render_help_index, resolve_topic
-from digital_office_spaces.seed import seed_world_classic as seed_world
+from wbs_seed_fixtures import seed_world_classic as seed_world
 from digital_office_spaces.world import World
 
 

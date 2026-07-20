@@ -13,6 +13,7 @@ Format: dated bullets, one line each — what landed, not a full story.
 - Package rename: `world_studio` → `digital_office_spaces`; CLI `dos` / `digital-office-spaces`
 - Product name **Digital Office Spaces (DOS)**; docs orient to collaborative office spaces (data, schedules, chats, TUI-first)
 - Add [ORIGIN.md](ORIGIN.md), [GITHUB.md](GITHUB.md); refresh README / IDEAS / product-map intro for DOS
+- **Seeds:** default **`office`** (company campus on the Wire — lobby, floor, meeting, records; handbook / channel / calendar / cabinet). **`empty`** suite for build-from-inside. **`bootstrap`** kept for kernel tests. Story / classic / tavern removed from product CLI (WBS fixtures remain under `tests/wbs_seed_fixtures.py` only)
 
 ## 2026-07-16
 

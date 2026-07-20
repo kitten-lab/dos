@@ -35,7 +35,7 @@ TUI_BORDER_ACCENT = "#5ec8d8"
 TUI_INPUT_BG = "#0c0c10"
 
 
-def ensure_world(path: Path, reseed: bool = False, seed: str = "story") -> World:
+def ensure_world(path: Path, reseed: bool = False, seed: str = "office") -> World:
     if reseed and path.exists():
         path.unlink()
     is_new = not path.exists()
@@ -965,15 +965,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--reseed",
         action="store_true",
-        help="Delete and recreate the world from the seed multiverse",
+        help="Delete and recreate the world from the office seed",
     )
     p.add_argument(
         "--seed",
-        choices=("story", "classic", "void", "tavern", "bootstrap"),
-        default="story",
+        choices=("office", "empty", "bootstrap"),
+        default="office",
         help=(
-            "Seed flavor when creating/reseeding: story (default), classic, void, "
-            "tavern (mystic Wick & Whisper), or bootstrap (bare Herenow)"
+            "Seed flavor when creating/reseeding: office (default company campus), "
+            "empty (unfurnished suite), or bootstrap (bare Herenow for kernel tests)"
         ),
     )
     p.add_argument(

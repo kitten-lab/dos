@@ -17,7 +17,7 @@ from digital_office_spaces.format import (
     show_name,
 )
 from digital_office_spaces.ids import cute_name, display_name, is_cute_name
-from digital_office_spaces.seed import seed_world_classic, seed_world_story
+from wbs_seed_fixtures import seed_world_classic, seed_world_story
 from digital_office_spaces.world import World
 
 
