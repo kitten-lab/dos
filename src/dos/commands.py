@@ -219,22 +219,42 @@ def _presence_code(world: World | None, inst: InstanceView) -> str:
     return (inst.ven_code or "—").strip() or "—"
 
 
+def _tdf_data_display(world: World | None, inst: InstanceView) -> str:
+    """
+    Human contents for a ticket slip column (range / due / raw).
+
+    Empty for non-TDFs so the data column can collapse when unused.
+    """
+    if world is None or not world.is_tdf(inst.id):
+        return ""
+    payload = world.tdf_payload(inst.id) or {}
+    data = payload.get("data") or {}
+    start = (data.get("start") or "").strip()
+    end = (data.get("end") or "").strip()
+    if start and end:
+        return f"{start} → {end}"
+    if start:
+        return start
+    raw = (data.get("raw") or data.get("when") or "").strip()
+    return raw
+
+
 def _presence_row(
     inst: InstanceView, *, world: World | None = None
-) -> tuple[str, str, str, str]:
+) -> tuple[str, str, str, str, str]:
     """
     Plain columns for look / examine lists::
 
-      prime · name · code · color_kind
+      prime · name · data · code · color_kind
 
-    Prime = origin VEN name; name = lived title; code = instance short ref
-    (includes VEN code + instance digits) so take/examine can target uniquely.
-    No kind/subtype columns — less noise; call by code when names get iffy.
-    TDFs show subtype as prime chip and TDF-######## as code.
+    Prime = origin VEN name; name = lived title; data = TDF contents (range…);
+    code = instance short ref / TDF-########.
+    TDFs show subtype as prime chip, range in data, TDF code as code.
     """
     name = display_name(inst.name or "")
     kind = (inst.ven_kind or "other").strip() or "other"
     prime = display_name(inst.ven_name or "") or "—"
+    data = ""
     if world is not None and world.is_tdf(inst.id):
         payload = world.tdf_payload(inst.id) or {}
         sub = (payload.get("subtype") or "").strip()
@@ -245,8 +265,9 @@ def _presence_row(
             prime = f"ticket/{sub}"
         else:
             prime = "ticket"
+        data = _tdf_data_display(world, inst)
     code = _presence_code(world, inst)
-    return prime, name, code, kind
+    return prime, name, data, code, kind
 
 
 def _presence_column_widths(
@@ -254,16 +275,21 @@ def _presence_column_widths(
     *,
     world: World | None = None,
     deep: bool = False,
-) -> tuple[int, int, int]:
-    """Widest PRIME / NAME / CODE across every non-empty section."""
+) -> tuple[int, int, int, int]:
+    """Widest PRIME / NAME / DATA / CODE across every non-empty section.
+
+    *data* width is 0 when no row carries TDF contents (column omitted).
+    """
     primes: list[str] = []
     names: list[str] = []
+    datas: list[str] = []
     codes: list[str] = []
 
     def _collect(inst: InstanceView) -> None:
-        p, n, c, _ = _presence_row(inst, world=world)
+        p, n, d, c, _ = _presence_row(inst, world=world)
         primes.append(p)
         names.append(n)
+        datas.append(d)
         codes.append(c)
 
     for _, items in sections:
@@ -273,10 +299,15 @@ def _presence_column_widths(
                 for ch in world.contents(inst.id):
                     _collect(ch)
     if not names:
-        return 4, 4, 8
+        return 4, 4, 0, 8
+    w_data = max((len(x) for x in datas), default=0)
+    # Only reserve a data column when something actually has contents
+    if not any(datas):
+        w_data = 0
     return (
         max(len(x) for x in primes),
         max(len(x) for x in names),
+        w_data,
         max(len(x) for x in codes),
     )
 
@@ -369,19 +400,25 @@ def _format_presence_line(
     *,
     w_prime: int,
     w_name: int,
+    w_data: int,
     w_code: int,
     world: World | None = None,
     indent: int = 2,
 ) -> str:
-    """One presence row: prime · name · code (+ optional non-interior slot)."""
+    """One presence row: prime · name · [data] · code (+ optional slot)."""
     gap = "  "
-    prime, name, code, color_kind = _presence_row(inst, world=world)
+    prime, name, data, code, color_kind = _presence_row(inst, world=world)
     line = (
         f"{' ' * indent}"
         f"[dim]{fmt.safe(fmt.pad_visible(prime, w_prime))}[/dim]{gap}"
         f"{fmt.colored_padded_name(name, color_kind, w_name)}{gap}"
-        f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]"
     )
+    if w_data > 0:
+        # Ticket contents (range / due) — dim, padded with the shared grid
+        line += (
+            f"[dim]{fmt.safe(fmt.pad_visible(data or '—', w_data))}[/dim]{gap}"
+        )
+    line += f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]"
     if world is not None:
         # Slot only when non-default (feeling, worn, …). interior + inventory
         # are the usual "in this list" slots — no trailer. No "run" badge.
@@ -398,6 +435,7 @@ def _format_presence_section(
     *,
     w_prime: int,
     w_name: int,
+    w_data: int,
     w_code: int,
     show_if_empty: bool = False,
     world: World | None = None,
@@ -416,7 +454,8 @@ def _format_presence_section(
         └─ Drawer  · Drawer · BIN-002-0001
             Spoon      Spoon      THG-003-0001
 
-    Columns: prime · name · code (instance short ref).
+    Columns: prime · name · [data] · code. *data* (ticket range/due) only when
+    any row in the shared grid carries TDF contents.
     Loose items always list before nested bins (blank line between).
     *deep*: each listed **bin** becomes a nested bin header with its
     contents underneath (one layer only).
@@ -436,6 +475,7 @@ def _format_presence_section(
             inst,
             w_prime=w_prime,
             w_name=w_name,
+            w_data=w_data,
             w_code=w_code,
             world=world,
             indent=indent,
@@ -493,17 +533,18 @@ def _format_look_presence_blocks(
         return []
     width_src = [(t, items) for t, items, _ in active if items]
     if width_src:
-        w_prime, w_name, w_code = _presence_column_widths(
+        w_prime, w_name, w_data, w_code = _presence_column_widths(
             width_src, world=world, deep=deep
         )
     else:
-        w_prime, w_name, w_code = 4, 4, 8
+        w_prime, w_name, w_data, w_code = 4, 4, 0, 8
     return [
         _format_presence_section(
             title,
             items,
             w_prime=w_prime,
             w_name=w_name,
+            w_data=w_data,
             w_code=w_code,
             show_if_empty=show_empty,
             world=world,
