@@ -577,6 +577,18 @@ def _layer_name_markup(name: str | None, kind: str) -> str:
     return fmt.colored_name(display_name(n), kind)
 
 
+def _now_datetime_label() -> str:
+    """Wall-clock now for location chrome (local time)."""
+    from datetime import datetime
+
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def _now_datetime_markup() -> str:
+    """Dim pipe + current datetime (after realm | timeline)."""
+    return f"[dim]|[/dim]  [dim]{fmt.safe(_now_datetime_label())}[/dim]"
+
+
 def _kind_subtype_trailer(inst: InstanceView) -> str:
     """
     Kind chip for examine headers (and non-look contexts).
@@ -592,7 +604,7 @@ def _kind_subtype_trailer(inst: InstanceView) -> str:
 
 
 def _instance_context_details(world: World, inst: InstanceView) -> str:
-    """kind[: subtype] | realm | timeline — trailer after a location name."""
+    """kind[: subtype] | realm | timeline | now — trailer after a location name."""
     kind_lbl = _kind_subtype_trailer(inst)
     coords = world.coords_of(inst)
     r = _layer_name_markup(coords.get("realm_name"), "realm")
@@ -601,6 +613,7 @@ def _instance_context_details(world: World, inst: InstanceView) -> str:
         f"{fmt.kind_label(kind_lbl)}"
         f"  [dim]|[/dim]  {r}"
         f"  [dim]|[/dim]  {t}"
+        f"  {_now_datetime_markup()}"
     )
 
 
@@ -608,27 +621,29 @@ def _location_header_line(world: World, inst: InstanceView) -> str:
     """
     Look lead-in — omit root kind ``place``; subtype only when set::
 
-        Location: Mailroom · app  |  Realm  |  Timeline
-        Location: The Void · Realm  |  Timeline
+        Location: Mailroom · app  |  Realm  |  Timeline  |  2026-07-20 14:32
+        Location: The Void · Realm  |  Timeline  |  2026-07-20 14:32
     """
     name = fmt.title_line(inst.name, kind="place")
     coords = world.coords_of(inst)
     r = _layer_name_markup(coords.get("realm_name"), "realm")
     t = _layer_name_markup(coords.get("timeline_name"), "timeline")
+    now = _now_datetime_markup()
     sub = (inst.ven_subtype or "").strip()
     if sub:
         details = (
             f"{fmt.kind_label(sub)}"
             f"  [dim]|[/dim]  {r}"
             f"  [dim]|[/dim]  {t}"
+            f"  {now}"
         )
     else:
-        details = f"{r}  [dim]|[/dim]  {t}"
+        details = f"{r}  [dim]|[/dim]  {t}  {now}"
     return f"[bold]Location:[/bold] {name}  [dim]·[/dim]  {details}"
 
 
 def _instance_context_line(world: World, inst: InstanceView) -> str:
-    """Under-title strip (examine etc.): kind[/subtype] | realm | timeline."""
+    """Under-title strip: kind[/subtype] | realm | timeline | now."""
     return _instance_context_details(world, inst)
 
 
