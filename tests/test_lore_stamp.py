@@ -6,12 +6,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.book import parse_book_line_ref
-from digital_office_spaces.commands import dispatch, parse_lore_add
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
+from dos.book import parse_book_line_ref
+from dos.commands import dispatch, parse_lore_add
+from dos.db import connect
+from dos.format import plain
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 def _world() -> World:

@@ -7,17 +7,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
-from digital_office_spaces.ids import (
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
+from dos.ids import (
     format_instance_ref,
     format_instance_short_ref,
     parse_instance_ref_token,
     parse_resolve_query,
 )
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.world import World
+from dos.world import World
 
 # Compact instance ref: FOL-001-0001 (VEN code + 4-digit copy)
 COMPOSITE = re.compile(r"^[A-Z]{3}-\d{3}-\d{4}$")
@@ -74,7 +74,7 @@ class FormatRefTests(unittest.TestCase):
         )
         self.assertEqual(parse_instance_ref_token("#1"), "0001")
         # Soft separators: spaces / underscores like dashes
-        from digital_office_spaces.ids import parse_ven_code, parse_resolve_query
+        from dos.ids import parse_ven_code, parse_resolve_query
 
         self.assertEqual(parse_ven_code("bin 3"), "BIN-003")
         self.assertEqual(parse_ven_code("BIN 003"), "BIN-003")

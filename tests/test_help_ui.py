@@ -6,10 +6,10 @@ import inspect
 import re
 import unittest
 
-from digital_office_spaces import cli
-from digital_office_spaces.format import plain
-from digital_office_spaces.help_topics import topic_index_terms
-from digital_office_spaces.help_ui import (
+from dos import cli
+from dos.format import plain
+from dos.help_topics import topic_index_terms
+from dos.help_ui import (
     HelpPane,
     numbered_index_entries,
     parse_help_command,

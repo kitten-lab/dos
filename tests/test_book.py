@@ -8,8 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces import cli
-from digital_office_spaces.book import (
+from dos import cli
+from dos.book import (
     PAGE_VIEW_WIDTH,
     STATUS_COLORS,
     format_numbered_lines,
@@ -24,12 +24,12 @@ from digital_office_spaces.book import (
     split_page_lines,
     wrap_text_hanging,
 )
-from digital_office_spaces.studio_text import FORMAT_HEADER, is_studio, with_studio_header
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
+from dos.studio_text import FORMAT_HEADER, is_studio, with_studio_header
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 def _world() -> World:
@@ -117,7 +117,7 @@ class PageLineUnitTests(unittest.TestCase):
 
     def test_fence_box_line_numbers_skip_padding(self) -> None:
         """Pad rows inside a code box are unnumbered; body lines stay sequential."""
-        from digital_office_spaces.studio_text import prepare_stored_text
+        from dos.studio_text import prepare_stored_text
 
         bt = "```"
         body = prepare_stored_text(
@@ -454,7 +454,7 @@ class BookDispatchTests(unittest.TestCase):
         assert book is not None
         stored = self.world.list_book_pages(book.id)[0]["body"]
         self.assertTrue(is_studio(stored))
-        from digital_office_spaces.studio_text import strip_studio_header
+        from dos.studio_text import strip_studio_header
 
         source = strip_studio_header(stored)
         logical = source.split("\n")
@@ -617,7 +617,7 @@ class BookReaderStructureTests(unittest.TestCase):
         # mutual exclusion with help rail
         self.assertIn("_close_help_only", src)
 
-        from digital_office_spaces import book_ui
+        from dos import book_ui
 
         br = inspect.getsource(book_ui.make_book_reader_screen)
         self.assertIn("BookReaderScreen", br)

@@ -1,6 +1,6 @@
 """STUDIO Writer — shared buffer for << / <<studio (desc, lore, folio leaves).
 
-Opens a Textual TextArea (or optional $digital_office_spaces_EDITOR / $EDITOR) so the
+Opens a Textual TextArea (or optional $dos_EDITOR / $EDITOR) so the
 builder can move freely, edit, save (Ctrl+S) or cancel (Esc / Ctrl+Q).
 Ctrl+A selects all; F2 / Alt+P toggles markup preview (no commit — avoids
 VS Code stealing Ctrl+P); double-click selects a word; triple-click selects
@@ -91,7 +91,7 @@ def run_text_editor(
     Open the buffer editor.
 
     Returns :class:`StudioBufferResult` on save, or ``None`` if cancelled.
-    Prefer in-process Textual TextArea; honor ``digital_office_spaces_EDITOR`` / ``EDITOR``
+    Prefer in-process Textual TextArea; honor ``dos_EDITOR`` / ``EDITOR``
     when set and no test hook is installed.
 
     When *page_title* is not ``None``, the TUI shows an editable title field.
@@ -111,7 +111,7 @@ def run_text_editor(
             page_title=page_title if page_title is not None else None,
         )
 
-    external = (os.environ.get("digital_office_spaces_EDITOR") or os.environ.get("EDITOR") or "").strip()
+    external = (os.environ.get("dos_EDITOR") or os.environ.get("EDITOR") or "").strip()
     if external:
         body = _run_external_editor(external, initial, title)
         if body is None:

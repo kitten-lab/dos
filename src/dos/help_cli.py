@@ -4,11 +4,11 @@ No world DB, no play session. Same topic catalog as in-game help.
 
 Examples::
 
-    digital-office-spaces-help              # Textual display (TTY)
-    digital-office-spaces-help look         # Textual opened on topic
-    digital-office-spaces-help --print look # one-shot plain print (scripts)
-    digital-office-spaces-help -i           # line-mode interactive
-    python -m digital_office_spaces.help_cli
+    dos-help              # Textual display (TTY)
+    dos-help look         # Textual opened on topic
+    dos-help --print look # one-shot plain print (scripts)
+    dos-help -i           # line-mode interactive
+    python -m dos.help_cli
 """
 
 from __future__ import annotations
@@ -259,7 +259,7 @@ def run_help_tui(initial_query: str = "") -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="digital-office-spaces-help",
+        prog="dos-help",
         description=(
             f"{PRODUCT_NAME} help catalog — Textual display in a second terminal "
             "(no world DB; same topics as in-game help)."
@@ -293,7 +293,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry for console script and ``python -m digital_office_spaces.help_cli``."""
+    """Entry for console script and ``python -m dos.help_cli``."""
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     topic = " ".join(args.topic).strip()
 

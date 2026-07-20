@@ -6,17 +6,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
-from digital_office_spaces.story_when import (
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
+from dos.story_when import (
     format_history_line,
     normalize_story_when,
     peel_story_when_suffix,
     peel_when_anywhere,
 )
-from digital_office_spaces.seed import seed_world_bootstrap
-from digital_office_spaces.world import World
+from dos.seed import seed_world_bootstrap
+from dos.world import World
 
 
 class StoryWhenParseTests(unittest.TestCase):

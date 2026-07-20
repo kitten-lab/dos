@@ -7,10 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.db import connect
-from digital_office_spaces.seed import seed_world_void
-from digital_office_spaces.ven_pack import import_pack
-from digital_office_spaces.world import World
+from dos.db import connect
+from dos.seed import seed_world_void
+from dos.ven_pack import import_pack
+from dos.world import World
 
 
 def _world() -> World:

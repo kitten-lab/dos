@@ -5,9 +5,9 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from digital_office_spaces import cli
-from digital_office_spaces import format as fmt
-from digital_office_spaces.format import TURN_RULE_WIDTH, plain, turn_separator
+from dos import cli
+from dos import format as fmt
+from dos.format import TURN_RULE_WIDTH, plain, turn_separator
 
 
 class TurnSeparatorTests(unittest.TestCase):

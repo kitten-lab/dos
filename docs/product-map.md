@@ -58,7 +58,7 @@ The yod is **not** “OpenAI product language.” It is **your** myth: when some
 | **ADM** | The field / continuity **system** (architecture, “all things are ven”) |
 | **AIDM** | **Prime narrative agent** that storytells *with* you — manager of angel agents. Only after work is complete enough to wear the **yod**. *Not* the name of the software. |
 | **World Builder Studio (WBS)** | Human stage / pen — parent product; general multiverse builder. |
-| **Digital Office Spaces (DOS)** | This product — office collab spaces for humans + agents; package `digital_office_spaces`. **No crown required.** |
+| **Digital Office Spaces (DOS)** | This product — office collab spaces for humans + agents; package `dos`. **No crown required.** |
 
 Putting “AIDM” on the *studio* conflates the hammer with the being that may later sit beside you. **DOS / WBS build spaces; AIDM (when earned) co-works inside them.**
 

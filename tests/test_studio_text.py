@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.studio_text import (
+from dos.studio_text import (
     FORMAT_HEADER,
     detect_format,
     is_openable_url,
@@ -20,7 +20,7 @@ from digital_office_spaces.studio_text import (
     render_studio_text,
     with_studio_header,
 )
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 def _world() -> World:
@@ -61,7 +61,7 @@ class StudioTextUnitTests(unittest.TestCase):
         self.assertNotIn("[bold red]nope", er.replace("\\[", "X"))
 
     def test_color_spans_whitelist(self) -> None:
-        from digital_office_spaces.studio_text import render_studio_text, STUDIO_COLORS
+        from dos.studio_text import render_studio_text, STUDIO_COLORS
 
         out = render_studio_text("{yellow}gold path{/} and {r}danger{/r}")
         self.assertIn("[yellow]", out)
@@ -213,8 +213,8 @@ Art: 2024-03-01
         self.assertIn("│ code here", p)
 
     def test_fence_inner_padding(self) -> None:
-        from digital_office_spaces.studio_text import format_fence_box
-        from digital_office_spaces.format import plain as pl
+        from dos.studio_text import format_fence_box
+        from dos.format import plain as pl
 
         rows = format_fence_box(["X"], "seed")
         text = pl("\n".join(rows))

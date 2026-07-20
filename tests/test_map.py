@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
-from digital_office_spaces.mapview import (
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
+from dos.mapview import (
     DEFAULT_MAP_DEPTH,
     MAX_MAP_DEPTH,
     collect_map_tree,
@@ -17,7 +17,7 @@ from digital_office_spaces.mapview import (
     parse_map_args,
 )
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 def _world() -> World:

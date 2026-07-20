@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 def _world() -> World:
@@ -83,7 +83,7 @@ class UndoTests(unittest.TestCase):
         self.assertEqual(len(self.world.list_book_pages(book.id)), 0)
 
     def test_undo_book_line_insert_remove_move(self) -> None:
-        from digital_office_spaces.book import split_page_lines
+        from dos.book import split_page_lines
 
         dispatch(self.world, "create book Field Notes | notebook")
         dispatch(self.world, "spawn field-notes")

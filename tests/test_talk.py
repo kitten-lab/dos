@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.dialog import (
+from dos.commands import dispatch
+from dos.db import connect
+from dos.dialog import (
     FIN_TOKEN,
     dialog_teaser_line,
     format_script_transcript,
@@ -18,9 +18,9 @@ from digital_office_spaces.dialog import (
     parse_transcript_turns,
     parse_when_stamp,
 )
-from digital_office_spaces.format import plain
+from dos.format import plain
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 def _world() -> World:

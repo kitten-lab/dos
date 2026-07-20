@@ -1,38 +1,37 @@
-# GitHub setup — Digital Office Spaces
+# GitHub — DOS
 
-Local repo is prepared with a clean initial commit on `main`. Create a remote, then push.
+**Remote:** `https://github.com/kitten-lab/dos` (SSH: `git@github.com:kitten-lab/dos.git`)
 
-## Option A — GitHub CLI (`gh`)
+Local tree: `C:\Builds\dos`.
+
+## Auth / CLI
 
 ```powershell
-cd C:\Builds\digital-office-spaces
+# GitHub CLI (once): winget install --id GitHub.cli -e
+gh auth login
+gh auth status
+```
 
-# Create under your user or org (pick one)
-gh repo create digital-office-spaces --private --source=. --remote=origin --description "Digital Office Spaces (DOS) — collaborative office world builder (TUI)"
-# or: gh repo create kitten-lab/digital-office-spaces --private --source=. --remote=origin ...
+## Push
 
+```powershell
+cd C:\Builds\dos
 git push -u origin main
 ```
 
-## Option B — Manual remote
+## Optional: rename repo to `dos-again`
 
-1. Create an empty repo on GitHub (no README, no .gitignore).
-2. Then:
+If the pun wants a longer slug later:
 
 ```powershell
-cd C:\Builds\digital-office-spaces
-git remote add origin https://github.com/<owner>/digital-office-spaces.git
-git push -u origin main
+gh repo rename dos-again --yes
+git remote set-url origin git@github.com:kitten-lab/dos-again.git
 ```
+
+Folder can stay `C:\Builds\dos` either way.
 
 ## Commit hygiene
 
 - Keep `worlds/` and `*.world.db` out of git (see `.gitignore`).
-- Prefer small, focused commits after this baseline.
+- Prefer small, focused commits.
 - Do not force-push `main` unless you mean to rewrite history.
-
-## Suggested next commits (product)
-
-1. Office seed world (lobby / desks / meeting room) replacing story-default as product default.
-2. First-class **schedule** and **chat** storage surfaces in-space.
-3. Docs: collaboration model (human + agent sessions).

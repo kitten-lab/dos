@@ -9,17 +9,17 @@ import sys
 import unittest
 from pathlib import Path
 
-from digital_office_spaces import help_cli
-from digital_office_spaces.format import plain
-from digital_office_spaces.help_cli import (
+from dos import help_cli
+from dos.format import plain
+from dos.help_cli import (
     help_text_for_query,
     main,
     print_help_query,
     run_help_tui,
     run_interactive,
 )
-from digital_office_spaces.help_topics import render_help_topic
-from digital_office_spaces.help_ui import render_numbered_index
+from dos.help_topics import render_help_topic
+from dos.help_ui import render_numbered_index
 
 
 class HelpTextQueryTests(unittest.TestCase):
@@ -101,8 +101,8 @@ class HelpCliMainTests(unittest.TestCase):
     def test_entry_point_and_textual_structure(self) -> None:
         pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
         text = pyproject.read_text(encoding="utf-8")
-        self.assertIn("digital-office-spaces-help", text)
-        self.assertIn("digital_office_spaces.help_cli:main", text)
+        self.assertIn("dos-help", text)
+        self.assertIn("dos.help_cli:main", text)
         src = inspect.getsource(help_cli)
         self.assertIn("def main", src)
         self.assertIn("help_text_for_query", src)
@@ -130,11 +130,11 @@ class HelpCliMainTests(unittest.TestCase):
 
 
 class HelpCliSubprocessTests(unittest.TestCase):
-    """Real ``python -m digital_office_spaces.help_cli --print`` launch path."""
+    """Real ``python -m dos.help_cli --print`` launch path."""
 
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, "-m", "digital_office_spaces.help_cli", *args],
+            [sys.executable, "-m", "dos.help_cli", *args],
             capture_output=True,
             text=True,
             cwd=str(Path(__file__).resolve().parents[1]),

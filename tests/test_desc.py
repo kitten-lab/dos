@@ -6,12 +6,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.textutil import escape_desc, unescape_desc
-from digital_office_spaces.world import World
+from dos.textutil import escape_desc, unescape_desc
+from dos.world import World
 
 
 def _world() -> World:
@@ -77,11 +77,11 @@ class DescCommandTests(unittest.TestCase):
 
     def test_multiline_on_target_studio_no_name_leak(self) -> None:
         """@desc on <name> <<studio must not glue name/studio into body."""
-        from digital_office_spaces.multiline_open import (
+        from dos.multiline_open import (
             commit_multiline_session,
             parse_multiline_opener,
         )
-        from digital_office_spaces.studio_text import is_studio, strip_studio_header
+        from dos.studio_text import is_studio, strip_studio_header
 
         self.assertTrue(
             dispatch(

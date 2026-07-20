@@ -8,11 +8,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
-from digital_office_spaces.seed import seed_world_void
-from digital_office_spaces.ven_pack import (
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
+from dos.seed import seed_world_void
+from dos.ven_pack import (
     export_ven,
     find_pack,
     import_pack,
@@ -22,7 +22,7 @@ from digital_office_spaces.ven_pack import (
     ven_collector_dir,
     world_label,
 )
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 def _world() -> World:
@@ -99,7 +99,7 @@ class VenPackRoundTripTests(unittest.TestCase):
 
     def test_dispatch_export_load(self) -> None:
         with mock.patch(
-            "digital_office_spaces.ven_pack.ven_collector_dir",
+            "dos.ven_pack.ven_collector_dir",
             return_value=self.collector,
         ):
             r = dispatch(self.world, "vens export The Knock")
@@ -140,7 +140,7 @@ class VenPackRoundTripTests(unittest.TestCase):
         self.assertEqual(code2, ven.code)
 
     def test_instance_export_import_book(self) -> None:
-        from digital_office_spaces.ven_pack import export_instance
+        from dos.ven_pack import export_instance
 
         self.assertTrue(
             dispatch(self.world, "create book Field Notes | notebook").ok
@@ -206,7 +206,7 @@ class VenPackRoundTripTests(unittest.TestCase):
 
     def test_code_collision_keeps_foreign_name(self) -> None:
         """FOL-00N in target is a different concept — do not attach as its child."""
-        from digital_office_spaces.ven_pack import export_instance
+        from dos.ven_pack import export_instance
 
         # Source: folio World Studio Help at whatever FOL code
         self.assertTrue(
@@ -215,8 +215,8 @@ class VenPackRoundTripTests(unittest.TestCase):
                 "create book World Studio Help | Full help dump.",
             ).ok
         )
-        self.assertTrue(dispatch(self.world, "spawn digital-office-spaces-help").ok)
-        help_book = self.world.resolve_here_named("digital-office-spaces-help")
+        self.assertTrue(dispatch(self.world, "spawn dos-help").ok)
+        help_book = self.world.resolve_here_named("dos-help")
         assert help_book is not None
         self.world.add_book_page(help_book.id, "Index", "help index body")
         path = export_instance(
@@ -267,7 +267,7 @@ class VenPackRoundTripTests(unittest.TestCase):
 
     def test_short_ref_not_collided_on_fresh_instance(self) -> None:
         """If 0001 is taken, import still works with next digits."""
-        from digital_office_spaces.ven_pack import export_instance
+        from dos.ven_pack import export_instance
 
         self.assertTrue(dispatch(self.world, "create book Ledger").ok)
         self.assertTrue(dispatch(self.world, "spawn ledger as Alpha").ok)

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from digital_office_spaces.book import PAGE_VIEW_WIDTH
-from digital_office_spaces.format import TURN_RULE_WIDTH, plain, turn_separator
-from digital_office_spaces.measure import CONTENT_MEASURE, measure_ruler, turn_rule_ascii
+from dos.book import PAGE_VIEW_WIDTH
+from dos.format import TURN_RULE_WIDTH, plain, turn_separator
+from dos.measure import CONTENT_MEASURE, measure_ruler, turn_rule_ascii
 
 
 class ContentMeasureTests(unittest.TestCase):

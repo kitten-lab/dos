@@ -6,12 +6,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.wiki import resolve_wiki_target
-from digital_office_spaces.world import World
+from dos.wiki import resolve_wiki_target
+from dos.world import World
 
 
 def _world() -> World:
@@ -114,8 +114,8 @@ class WikiDispatchTests(unittest.TestCase):
 
     def test_sublink_prefers_lived_instance_title(self) -> None:
         """Prime Place + instance Herenow → sub-link reads Herenow, not Place place."""
-        from digital_office_spaces.seed import seed_world_bootstrap
-        from digital_office_spaces.db import connect
+        from dos.seed import seed_world_bootstrap
+        from dos.db import connect
 
         tmp = tempfile.NamedTemporaryFile(suffix=".world.db", delete=False)
         tmp.close()

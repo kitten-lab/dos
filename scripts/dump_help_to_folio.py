@@ -1,4 +1,4 @@
-"""Dump digital-office-spaces help topics into a Kitten-Lab folio + optional .ven pack.
+"""Dump dos help topics into a Kitten-Lab folio + optional .ven pack.
 
 Usage:
   python scripts/dump_help_to_folio.py
@@ -16,9 +16,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from digital_office_spaces.db import connect, get_meta  # noqa: E402
-from digital_office_spaces.format import plain  # noqa: E402
-from digital_office_spaces.help_topics import (  # noqa: E402
+from dos.db import connect, get_meta  # noqa: E402
+from dos.format import plain  # noqa: E402
+from dos.help_topics import (  # noqa: E402
     _HELP_INDEX_CATEGORIES,
     _init_topics,
     _TOPICS,
@@ -27,7 +27,7 @@ from digital_office_spaces.help_topics import (  # noqa: E402
     resolve_topic,
     topic_index_entries,
 )
-from digital_office_spaces.world import World  # noqa: E402
+from dos.world import World  # noqa: E402
 
 
 def _topic_keys_in_order() -> list[tuple[str, str]]:
@@ -116,7 +116,7 @@ def put_in_world(world_path: Path, pages: list[tuple[str, str]]) -> tuple[str, s
             "World Studio Help",
             "folio",
             (
-                "Full command help dump from digital-office-spaces (help_topics). "
+                "Full command help dump from dos (help_topics). "
                 "Reference folio for builders in Kitten-Lab."
             ),
             tags=["help", "reference", "studio"],
@@ -135,7 +135,7 @@ def put_in_world(world_path: Path, pages: list[tuple[str, str]]) -> tuple[str, s
 
 
 def export_ven_pack(world: World, inst_id: str, *, origin: str) -> Path:
-    from digital_office_spaces.ven_pack import export_instance, ven_collector_dir
+    from dos.ven_pack import export_instance, ven_collector_dir
 
     inst = world.get_instance(inst_id)
     if inst is None:

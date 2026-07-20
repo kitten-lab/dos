@@ -7,10 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
-from digital_office_spaces.ids import (
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
+from dos.ids import (
     cute_name,
     display_name,
     is_cute_name,
@@ -20,7 +20,7 @@ from digital_office_spaces.ids import (
 )
 from wbs_seed_fixtures import seed_world_classic as seed_world
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.world import World
+from dos.world import World
 
 CUTE = re.compile(r"^[A-Z0-9]+(-[A-Z0-9]+)*$")
 

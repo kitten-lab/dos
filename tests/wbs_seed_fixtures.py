@@ -1,14 +1,14 @@
 """WBS multiverse seeds kept only as test fixtures (not product CLI).
 
-Product seeds live in digital_office_spaces.seed (office / empty / bootstrap).
+Product seeds live in dos.seed (office / empty / bootstrap).
 These cathedral/story layouts still exercise exits, lore, dialog, and timelines.
 """
 from __future__ import annotations
 
 import sqlite3
 
-from digital_office_spaces.db import init_schema, set_meta
-from digital_office_spaces.world import World
+from dos.db import init_schema, set_meta
+from dos.world import World
 
 def seed_world_classic(conn: sqlite3.Connection) -> None:
     """Original cathedral / mirror / shattered sample."""

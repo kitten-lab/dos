@@ -6,23 +6,23 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
-from digital_office_spaces.multiline_open import (
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
+from dos.multiline_open import (
     commit_multiline_session,
     parse_multiline_opener,
     seed_initial_body,
 )
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.studio_text import is_studio
-from digital_office_spaces.text_editor import (
+from dos.studio_text import is_studio
+from dos.text_editor import (
     _editor_hint_markup,
     _preview_markup,
     set_editor_hook,
     word_bounds_at,
 )
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 class WordBoundsTests(unittest.TestCase):
@@ -209,7 +209,7 @@ class EditorCommitAndLogTests(unittest.TestCase):
         self.assertIn("lore", log.lower())
 
     def test_editor_hook_used_by_run_text_editor(self) -> None:
-        from digital_office_spaces.text_editor import StudioBufferResult, run_text_editor
+        from dos.text_editor import StudioBufferResult, run_text_editor
 
         set_editor_hook(lambda i, t, s: "hooked body")
         out = run_text_editor(initial="x", title="t")
@@ -237,7 +237,7 @@ class EditorCommitAndLogTests(unittest.TestCase):
             f"book page edit field-notes {page['position']} <<studio"
         )
         assert ml is not None
-        from digital_office_spaces.multiline_open import seed_page_title
+        from dos.multiline_open import seed_page_title
 
         seeded = seed_page_title(self.world, ml)
         self.assertEqual(seeded, "Old Title")
@@ -256,7 +256,7 @@ class EditorCommitAndLogTests(unittest.TestCase):
     def test_cli_wires_parse_and_editor(self) -> None:
         import inspect
 
-        from digital_office_spaces import cli
+        from dos import cli
 
         src = inspect.getsource(cli)
         self.assertIn("parse_multiline_opener", src)

@@ -7,11 +7,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain, safe
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain, safe
 from wbs_seed_fixtures import seed_world_classic as seed_world
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 def _seeded_world() -> World:
@@ -98,7 +98,7 @@ class LookHierarchyTests(unittest.TestCase):
         self.assertIn("Hack", rendered)
         self.assertNotIn("EVIL-BOLD-RED-HACK", rendered)
         # Dynamic world/user strings still escape via hint/ok when not normalized
-        from digital_office_spaces.format import hint
+        from dos.format import hint
 
         h = hint(f"→ {evil}")
         self.assertIn(r"\[bold red]", h)
@@ -106,7 +106,7 @@ class LookHierarchyTests(unittest.TestCase):
         self.assertEqual(plain(h).count("Hack"), 1)
 
     def test_hint_escapes_like_ok_err(self) -> None:
-        from digital_office_spaces.format import hint, ok, err
+        from dos.format import hint, ok, err
 
         payload = "x [bold]inject[/bold] y"
         for fn in (hint, ok, err):

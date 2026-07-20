@@ -1,6 +1,8 @@
-# Digital Office Spaces (DOS)
+# DOS — Digital Office Spaces
 
-**Collaborative digital office world builder** for humans and agents working from anywhere — shared places, data, schedules, and chats inside a **TUI terminal environment** (other front ends may come later; TUI is the focus for now).
+**DOS, again.** Collaborative digital office world builder for humans and agents working from anywhere — shared places, data, schedules, and chats inside a **TUI terminal environment** (other front ends may come later; TUI is the focus for now).
+
+Repo / package / CLI: **`dos`**. Product name: Digital Office Spaces.
 
 This repository is a **clean product branch** of [World Builder Studio](https://github.com/kitten-lab/aidm-world-studio) (`world-studio`): same VEN / instance / place kernel, reoriented toward **office spaces** rather than general multiverse storytelling.
 
@@ -36,14 +38,14 @@ Storage is a single **SQLite** world file (`worlds/*.world.db`). The DB is the s
 ## Quick start
 
 ```powershell
-cd C:\Builds\digital-office-spaces
+cd C:\Builds\dos
 py -3.12 -m pip install -e .
-py -3.12 -m digital_office_spaces --reseed
+py -3.12 -m dos --reseed
 # or, after install:
 dos --reseed
 ```
 
-CLI entry points: `dos`, `digital-office-spaces`, and `python -m digital_office_spaces`.
+CLI: `dos` · `dos-help` · `python -m dos`.
 
 ### Seeds (you start *inside* the office)
 
@@ -54,9 +56,9 @@ CLI entry points: `dos`, `digital-office-spaces`, and `python -m digital_office_
 | **`bootstrap`** | Bare engine kernel (Herenow) for tests — not the product welcome. |
 
 ```powershell
-py -3.12 -m digital_office_spaces --reseed --seed office
-py -3.12 -m digital_office_spaces --reseed --seed empty
-py -3.12 -m digital_office_spaces --reseed --seed bootstrap
+py -3.12 -m dos --reseed --seed office
+py -3.12 -m dos --reseed --seed empty
+py -3.12 -m dos --reseed --seed bootstrap
 ```
 
 You are not outside looking in — **you are already in Digital Office Spaces**, working a company site humans and agents share.
@@ -64,7 +66,7 @@ You are not outside looking in — **you are already in Digital Office Spaces**,
 ### Textual TUI
 
 ```powershell
-python -m digital_office_spaces --textual --reseed
+python -m dos --textual --reseed
 # or: dos --textual --reseed
 ```
 
@@ -73,13 +75,13 @@ Plain REPL shows a **situation strip** above each `›` prompt. Use **`locate se
 ### One-shot commands (scripts / tests)
 
 ```powershell
-python -m digital_office_spaces -c look -c inv
+python -m dos -c look -c inv
 ```
 
 ## Development
 
 ```powershell
-cd C:\Builds\digital-office-spaces
+cd C:\Builds\dos
 py -3.12 -m pip install -e .
 py -3.12 -m pytest tests -q
 ```

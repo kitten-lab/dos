@@ -7,12 +7,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import HELP, dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
-from digital_office_spaces.help_topics import render_help_index, resolve_topic
+from dos.commands import HELP, dispatch
+from dos.db import connect
+from dos.format import plain
+from dos.help_topics import render_help_index, resolve_topic
 from wbs_seed_fixtures import seed_world_classic as seed_world
-from digital_office_spaces.world import World
+from dos.world import World
 
 
 def _seeded_world() -> World:

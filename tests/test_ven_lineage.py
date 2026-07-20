@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
-from digital_office_spaces.seed import seed_world_void
-from digital_office_spaces.world import World
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
+from dos.seed import seed_world_void
+from dos.world import World
 
 
 def _world() -> World:

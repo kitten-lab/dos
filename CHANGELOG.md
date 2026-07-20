@@ -9,11 +9,12 @@ Format: dated bullets, one line each — what landed, not a full story.
 
 ## 2026-07-20 — Digital Office Spaces (product branch)
 
-- **Fork baseline:** clean copy of world-studio engine into `digital-office-spaces` with **new git history** (no parent commit graph)
-- Package rename: `world_studio` → `digital_office_spaces`; CLI `dos` / `digital-office-spaces`
+- **Fork baseline:** clean copy of world-studio engine into `dos` with **new git history** (no parent commit graph)
+- Package rename: `world_studio` → `dos`; CLI `dos` / `dos`
 - Product name **Digital Office Spaces (DOS)**; docs orient to collaborative office spaces (data, schedules, chats, TUI-first)
 - Add [ORIGIN.md](ORIGIN.md), [GITHUB.md](GITHUB.md); refresh README / IDEAS / product-map intro for DOS
 - **Seeds:** default **`office`** (company campus on the Wire — lobby, floor, meeting, records; handbook / channel / calendar / cabinet). **`empty`** suite for build-from-inside. **`bootstrap`** kept for kernel tests. Story / classic / tavern removed from product CLI (WBS fixtures remain under `tests/wbs_seed_fixtures.py` only)
+- **Rename to `dos`:** package / module / CLI / folder / GitHub (`kitten-lab/dos`) — DOS, again
 
 ## 2026-07-16
 
@@ -32,5 +33,5 @@ Format: dated bullets, one line each — what landed, not a full story.
 
 ## 2026-07-16 — initial public tree
 
-- Initial commit: World Studio core (`digital_office_spaces`) — lean VEN kinds, folio reader, wiki soft reader, bootstrap Herenow seed, paths vocabulary, tests
-- Package name `digital-office-spaces` / module `digital_office_spaces`; product name AIDM World Studio
+- Initial commit: World Studio core (`dos`) — lean VEN kinds, folio reader, wiki soft reader, bootstrap Herenow seed, paths vocabulary, tests
+- Package name `dos` / module `dos`; product name AIDM World Studio

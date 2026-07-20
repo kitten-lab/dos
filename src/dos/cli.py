@@ -345,7 +345,7 @@ def _studio_boot_panel(world_path: Path, world_name: str) -> Panel:
         f"{flavor_line}"
         f"[dim]try[/dim]    look · locate self · undo · help · clear\n"
         f"[dim]↑[/dim]       previous commands  ·  "
-        f"[dim]tui[/dim]  python -m digital_office_spaces --textual",
+        f"[dim]tui[/dim]  python -m dos --textual",
         border_style="dim",
         padding=(1, 2),
         title="[bright_cyan]studio[/bright_cyan]",
@@ -953,7 +953,7 @@ def run_textual(world: World, world_path: Path) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="digital-office-spaces",
+        prog="dos",
         description="VEN-based MUD-like multiverse world-building studio",
     )
     p.add_argument(

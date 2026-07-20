@@ -7,18 +7,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from digital_office_spaces import cli
-from digital_office_spaces.cli import (
+from dos import cli
+from dos.cli import (
     MultilineDescDraft,
     _collect_multiline_desc,
     _desc_collect_hint,
 )
-from digital_office_spaces.commands import dispatch
-from digital_office_spaces.db import connect
-from digital_office_spaces.format import plain
+from dos.commands import dispatch
+from dos.db import connect
+from dos.format import plain
 from wbs_seed_fixtures import seed_world_story
-from digital_office_spaces.studio_text import FORMAT_HEADER, is_studio
-from digital_office_spaces.world import World
+from dos.studio_text import FORMAT_HEADER, is_studio
+from dos.world import World
 
 
 def _world() -> World:
@@ -139,7 +139,7 @@ class DescLiveIntegrationTests(unittest.TestCase):
         self.assertIn("Ctrl+S", src)
         # Draft helper still exists for unit tests / legacy
         self.assertIn("MultilineDescDraft", src)
-        from digital_office_spaces import text_editor
+        from dos import text_editor
 
         te = inspect.getsource(text_editor)
         self.assertIn("ctrl+a", te)
