@@ -25,27 +25,22 @@ TICKET_BRICK_COLORS: dict[str, str] = {
 }
 
 
-def ticket_brick_plain(subtype: str | None) -> str:
-    """Visible brick text without markup: ``[TICKET:DATE]``."""
-    sub = (subtype or "SLIP").strip().upper() or "SLIP"
-    if sub.startswith("TICKET"):
-        return f"[{sub}]"
-    return f"[TICKET:{sub}]"
+def ticket_brick_plain(subtype: str | None = None) -> str:
+    """Visible brick text without markup: ``[TICKET]`` (color carries subtype)."""
+    _ = subtype  # color only — label stays generic
+    return "[TICKET]"
 
 
 def ticket_brick_color(subtype: str | None) -> str:
-    """Background color for the ticket type brick."""
+    """Background color for the ticket type brick (glanceable subtype)."""
     key = (subtype or "").strip().lower()
     return TICKET_BRICK_COLORS.get(key, "#6b7280")  # slate fallback
 
 
 def ticket_brick_markup(subtype: str | None) -> str:
-    """White-on-color brick for look / inv presence rows."""
-    plain = ticket_brick_plain(subtype)
-    # strip outer [] for the pill interior; keep label TICKET:DATE
-    inner = plain.strip("[]")
+    """White-on-color brick; subtype is color-only, not in the label."""
     color = ticket_brick_color(subtype)
-    return f"[bold white on {color}] {inner} [/]"
+    return f"[bold white on {color}] TICKET [/]"
 
 
 def ticket_data_display(data: dict[str, Any] | None) -> str:

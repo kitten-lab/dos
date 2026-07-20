@@ -221,27 +221,25 @@ def _presence_code(world: World | None, inst: InstanceView) -> str:
 
 def _ticket_presence_fields(
     world: World, inst: InstanceView
-) -> tuple[str, str, str, str, str]:
+) -> tuple[str, str, str, str, str, str]:
     """
     Plain ticket columns (no markup)::
 
-      brick · code · name · data · kind
+      brick · code · name · data · subtype · kind
 
-    Example: ``[TICKET:DATE]`` / ``TDF-…`` / title / ``July 21 2026`` / ``due``
+    Brick is always ``[TICKET]`` (color = subtype). Subtype sits before kind.
+    Example: ``[TICKET]`` / ``TDF-…`` / title / ``July 21 2026`` / ``date`` / ``due``
     """
     from .tdf import ticket_brick_plain, ticket_data_display
 
     payload = world.tdf_payload(inst.id) or {}
-    sub = (payload.get("subtype") or "").strip()
+    sub = (payload.get("subtype") or "").strip().lower()
     kind = (payload.get("kind") or "").strip().lower()
     data = ticket_data_display(payload.get("data") or {})
     name = display_name(inst.name or "")
-    # Notes often *are* the body — prefer name; data stays empty unless dates
     code = (payload.get("code") or _presence_code(world, inst) or "").strip()
     brick = ticket_brick_plain(sub)
-    # Kind column only when it adds signal (not blank)
-    kind_col = kind if kind else ""
-    return brick, code, name, data, kind_col
+    return brick, code, name, data, sub, kind
 
 
 def _presence_row(
@@ -264,15 +262,15 @@ def _presence_column_widths(
     *,
     world: World | None = None,
     deep: bool = False,
-) -> tuple[int, int, int, int, int, int, int, int]:
+) -> tuple[int, int, int, int, int, int, int, int, int]:
     """
     Widths for ordinary rows and ticket rows.
 
     Returns::
       w_prime, w_name, w_code,
-      w_t_brick, w_t_code, w_t_name, w_t_data, w_t_kind
+      w_t_brick, w_t_code, w_t_name, w_t_data, w_t_sub, w_t_kind
 
-    Ticket kind width is 0 when no ticket shows a kind (column omitted).
+    Subtype/kind widths are 0 when unused (column omitted).
     """
     primes: list[str] = []
     names: list[str] = []
@@ -281,15 +279,17 @@ def _presence_column_widths(
     t_codes: list[str] = []
     t_names: list[str] = []
     t_datas: list[str] = []
+    t_subs: list[str] = []
     t_kinds: list[str] = []
 
     def _collect(inst: InstanceView) -> None:
         if world is not None and world.is_tdf(inst.id):
-            b, c, n, d, k = _ticket_presence_fields(world, inst)
+            b, c, n, d, s, k = _ticket_presence_fields(world, inst)
             t_bricks.append(b)
             t_codes.append(c)
             t_names.append(n)
             t_datas.append(d)
+            t_subs.append(s)
             t_kinds.append(k)
             return
         p, n, c, _ = _presence_row(inst, world=world)
@@ -313,6 +313,9 @@ def _presence_column_widths(
     w_t_data = max((len(x) for x in t_datas), default=0)
     if not any(t_datas):
         w_t_data = 0
+    w_t_sub = max((len(x) for x in t_subs), default=0)
+    if not any(t_subs):
+        w_t_sub = 0
     w_t_kind = max((len(x) for x in t_kinds), default=0)
     if not any(t_kinds):
         w_t_kind = 0
@@ -324,6 +327,7 @@ def _presence_column_widths(
         w_t_code,
         w_t_name,
         w_t_data,
+        w_t_sub,
         w_t_kind,
     )
 
@@ -419,22 +423,22 @@ def _format_ticket_presence_line(
     w_code: int,
     w_name: int,
     w_data: int,
+    w_sub: int,
     w_kind: int,
     indent: int = 2,
 ) -> str:
     """
     Ticket presence row (floor or in a bin)::
 
-      [TICKET:DATE]  TDF-…  Deadline…  July 21 2026  due
-      [TICKET:NOTE]  TDF-…  The wait is over…
+      [TICKET]  TDF-…  Deadline…  July 21 2026  date  due
+      [TICKET]  TDF-…  The wait is over…               note
     """
     from .tdf import ticket_brick_markup
 
     gap = "  "
-    brick_plain, code, name, data, kind = _ticket_presence_fields(world, inst)
-    payload = world.tdf_payload(inst.id) or {}
-    sub = (payload.get("subtype") or "").strip()
-    # Brick: colored pill, then pad to grid using plain width
+    brick_plain, code, name, data, sub, kind = _ticket_presence_fields(
+        world, inst
+    )
     brick_mk = ticket_brick_markup(sub)
     brick_pad = max(0, w_brick - len(brick_plain))
     line = f"{' ' * indent}{brick_mk}{' ' * brick_pad}{gap}"
@@ -442,6 +446,9 @@ def _format_ticket_presence_line(
     line += f"{fmt.colored_padded_name(name, 'ticket', w_name)}"
     if w_data > 0:
         line += f"{gap}[dim]{fmt.safe(fmt.pad_visible(data or '', w_data))}[/dim]"
+    # subtype before kind (color already on brick; text is the readable label)
+    if w_sub > 0:
+        line += f"{gap}[dim]{fmt.safe(fmt.pad_visible(sub or '', w_sub))}[/dim]"
     if w_kind > 0:
         line += f"{gap}[dim]{fmt.safe(fmt.pad_visible(kind or '', w_kind))}[/dim]"
     if world is not None:
@@ -462,6 +469,7 @@ def _format_presence_line(
     w_t_code: int = 0,
     w_t_name: int = 0,
     w_t_data: int = 0,
+    w_t_sub: int = 0,
     w_t_kind: int = 0,
     world: World | None = None,
     indent: int = 2,
@@ -471,10 +479,11 @@ def _format_presence_line(
         return _format_ticket_presence_line(
             inst,
             world=world,
-            w_brick=max(w_t_brick, 12),
+            w_brick=max(w_t_brick, 8),
             w_code=max(w_t_code, 12),
             w_name=max(w_t_name, 8),
             w_data=w_t_data,
+            w_sub=w_t_sub,
             w_kind=w_t_kind,
             indent=indent,
         )
@@ -507,6 +516,7 @@ def _format_presence_section(
     w_t_code: int = 0,
     w_t_name: int = 0,
     w_t_data: int = 0,
+    w_t_sub: int = 0,
     w_t_kind: int = 0,
     show_if_empty: bool = False,
     world: World | None = None,
@@ -517,10 +527,10 @@ def _format_presence_section(
 
       Here
         Soft Ache      Soft Ache      SNS-001-0001
-        [TICKET:DATE]  TDF-…  Deadline…  July 21  due
+        [TICKET]  TDF-…  Deadline…  July 21  date  due
 
     Ordinary: prime · name · code.
-    Tickets: colored brick · TDF id · title · [data] · [kind].
+    Tickets: color brick · TDF id · title · [data] · subtype · [kind].
     *deep*: each listed **bin** becomes a nested bin header with its
     contents underneath (one layer only).
     """
@@ -544,6 +554,7 @@ def _format_presence_section(
             w_t_code=w_t_code,
             w_t_name=w_t_name,
             w_t_data=w_t_data,
+            w_t_sub=w_t_sub,
             w_t_kind=w_t_kind,
             world=world,
             indent=indent,
@@ -609,11 +620,12 @@ def _format_look_presence_blocks(
             w_t_code,
             w_t_name,
             w_t_data,
+            w_t_sub,
             w_t_kind,
         ) = _presence_column_widths(width_src, world=world, deep=deep)
     else:
         w_prime, w_name, w_code = 4, 4, 8
-        w_t_brick = w_t_code = w_t_name = w_t_data = w_t_kind = 0
+        w_t_brick = w_t_code = w_t_name = w_t_data = w_t_sub = w_t_kind = 0
     return [
         _format_presence_section(
             title,
@@ -625,6 +637,7 @@ def _format_look_presence_blocks(
             w_t_code=w_t_code,
             w_t_name=w_t_name,
             w_t_data=w_t_data,
+            w_t_sub=w_t_sub,
             w_t_kind=w_t_kind,
             show_if_empty=show_empty,
             world=world,

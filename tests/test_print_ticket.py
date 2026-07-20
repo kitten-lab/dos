@@ -51,8 +51,10 @@ class PrintTicketTests(unittest.TestCase):
 
         look = plain(dispatch(self.world, "look").message)
         self.assertIn("Global Release Date", look)
-        # Brick + id + details + kind
-        self.assertIn("TICKET:DATE", look)
+        # Brick is generic TICKET; subtype + kind are trailing columns
+        self.assertIn("TICKET", look)
+        self.assertNotIn("TICKET:DATE", look)
+        self.assertIn("date", look.lower())
         self.assertIn("Jan 20", look)
         self.assertIn("Feb 15", look)
         self.assertRegex(look, r"Jan 20.*Feb 15")
