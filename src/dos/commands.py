@@ -1930,15 +1930,18 @@ def _take(world: World, arg: str) -> str:
         cont_name = arg[idx + 6 :].strip()
         if not thing_name or not cont_name:
             return fmt.hint("Usage: take <thing> from <container>")
-        cont = world.resolve_here_named(cont_name)
-        if not cont:
-            return fmt.err(
+        cont, cerr = _resolve_one(world, cont_name)
+        if cerr or cont is None:
+            return cerr or fmt.err(
                 f"No container {cont_name!r} here or in inventory.  "
                 f"Try: inv  ·  examine <name>"
             )
         if not world.is_reachable(cont.id):
             return fmt.err(f"{cont.name} is not within reach.")
-        thing = world.find_in_container(cont.id, thing_name)
+        inside_hits = world.find_in_container_matches(cont.id, thing_name)
+        if len(inside_hits) > 1:
+            return _format_ambiguous(world, thing_name, inside_hits)
+        thing = inside_hits[0] if inside_hits else None
         if not thing:
             # list what's inside for a helpful error
             inside = world.contents(cont.id)
@@ -1981,10 +1984,12 @@ def _take(world: World, arg: str) -> str:
             return fmt.join_blocks(fmt.ok(ok_line), portal_h, gap=0)
         return fmt.ok(ok_line)
 
-    # take from floor
-    thing = world.resolve_here_named(arg)
-    if not thing:
-        return fmt.err(
+    # take from floor (or nested — resolve walks into bins)
+    thing, terr = _resolve_one(world, arg)
+    if terr or thing is None:
+        if terr and "Ambiguous" in (terr or ""):
+            return terr
+        return terr or fmt.err(
             f"You don't see {arg!r} here.  "
             f"If it's in a box: take {arg} from <box>"
         )
@@ -2890,8 +2895,8 @@ def _format_ambiguous(world: World, query: str, matches: list[InstanceView]) -> 
     lines = [
         fmt.err(f"Ambiguous {query!r} — {len(matches)} matches."),
         fmt.hint(
-            "Qualify with: here · inv · from <box> · #FOL-001-0001  "
-            "e.g. field-notes inv  ·  notes from pouch  ·  field-notes#0002"
+            "Qualify with: here · inv · from <box> · face code (com-7f3a2c / com-7f3a2c.2)  "
+            "e.g. drawer inv  ·  titles from cabinet  ·  dra-a1b2c3.2"
         ),
     ]
     for c in matches:
@@ -6373,9 +6378,11 @@ def _resolve_put_destination(
     if player is not None and names_match(key, player.name):
         return player, None
 
-    cont = world.resolve_here_named(key)
+    cont, cerr = _resolve_one(world, key)
     if cont is not None:
         return cont, None
+    if cerr and "Ambiguous" in (cerr or ""):
+        return None, cerr
 
     neighbors = world.resolve_adjacent_place(key)
     if len(neighbors) == 1:
@@ -6430,9 +6437,9 @@ def _put(world: World, arg: str) -> str:
             "Usage: put <thing> in|on <container|exit|nearby place> [slot]"
         )
 
-    thing = world.resolve_here_named(thing_name)
-    if not thing:
-        return fmt.err(f"No {thing_name!r} here.")
+    thing, terr = _resolve_one(world, thing_name)
+    if terr or thing is None:
+        return terr or fmt.err(f"No {thing_name!r} here.")
     cont, cerr = _resolve_put_destination(world, cont_name)
     if cerr or cont is None:
         return cerr or fmt.err(f"No container or nearby place {cont_name!r}.")

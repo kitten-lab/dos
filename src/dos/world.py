@@ -2503,11 +2503,32 @@ class World:
         self.put_in(item_instance_id, pid, slot="inventory")
 
     def find_in_container(self, container_instance_id: str, name: str) -> InstanceView | None:
-        """Find a direct content of a container by name."""
-        for c in self.contents(container_instance_id):
-            if names_match(name, c.name):
-                return c
+        """
+        Find a direct content of a container by instance title, prime name/slug,
+        or short ref / office face code (same rules as resolve-here).
+        """
+        hits = self.find_in_container_matches(container_instance_id, name)
+        if len(hits) == 1:
+            return hits[0]
         return None
+
+    def find_in_container_matches(
+        self, container_instance_id: str, name: str
+    ) -> list[InstanceView]:
+        """All direct contents matching *name* (title, prime, slug, or code)."""
+        q = (name or "").strip()
+        if not q:
+            return []
+        hits: list[InstanceView] = []
+        for c in self.contents(container_instance_id):
+            if (
+                names_match(q, c.name or "")
+                or names_match(q, c.ven_name or "")
+                or names_match(q, c.ven_slug or "")
+                or self.short_ref_matches(c.id, q)
+            ):
+                hits.append(c)
+        return hits
 
     def drop(self, item_instance_id: str) -> None:
         pid = self.player_id()
