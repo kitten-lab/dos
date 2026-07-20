@@ -14,7 +14,9 @@ from .ids import (
     format_instance_ref,
     format_instance_short_ref,
     format_ven_code,
+    is_office_ven_code,
     kind_code_prefix,
+    mint_office_ven_code,
     names_match,
     new_id,
     new_tdf_code,
@@ -337,11 +339,15 @@ class World:
             final_slug = f"{base}-{n}"
             n += 1
         if code:
-            final_code = parse_ven_code(code) or code.strip().upper()
+            final_code = parse_ven_code(code) or code.strip()
+            if is_office_ven_code(final_code):
+                final_code = final_code.lower()
+            elif parse_ven_code(final_code):
+                final_code = parse_ven_code(final_code) or final_code
             if self.get_ven_by_code(final_code) is not None:
                 raise ValueError(f"VEN code {final_code} already in use")
         else:
-            final_code = self.allocate_ven_code(kind)
+            final_code = self.allocate_ven_code(kind, slug=final_slug)
         ven_id = new_id("ven")
         self.conn.execute(
             """
@@ -367,32 +373,26 @@ class World:
         self.conn.commit()
         return ven_id
 
-    def allocate_ven_code(self, kind: str) -> str:
-        """Next compact code for this kind: RLM-001, OBJ-014, …"""
-        prefix = kind_code_prefix(kind)
+    def allocate_ven_code(self, kind: str, *, slug: str = "") -> str:
+        """
+        Mint a DOS office face code: ``com-7f3a2c`` from cute-slug + hex.
+
+        *kind* is unused for the face (office codes are name-derived); kept for
+        call-site compatibility. No genesis ordinals.
+        """
+        _ = kind
         rows = self.conn.execute(
             "SELECT code FROM vens WHERE code IS NOT NULL AND code != ''"
         ).fetchall()
-        max_n = 0
-        for r in rows:
-            parsed = parse_ven_code(r["code"])
-            if not parsed:
-                continue
-            pref, _, num = parsed.partition("-")
-            if pref != prefix:
-                continue
-            try:
-                max_n = max(max_n, int(num))
-            except ValueError:
-                continue
-        return format_ven_code(prefix, max_n + 1)
+        taken = {(r["code"] or "").strip().lower() for r in rows if r["code"]}
+        return mint_office_ven_code(slug or "item", taken=taken)
 
     def get_ven_by_code(self, code: str) -> VenView | None:
         canon = parse_ven_code(code)
         if not canon:
             return None
         row = self.conn.execute(
-            "SELECT id FROM vens WHERE upper(code) = ?",
+            "SELECT id FROM vens WHERE lower(code) = lower(?)",
             (canon,),
         ).fetchone()
         if row:
@@ -887,9 +887,11 @@ class World:
 
     def short_ref_of(self, instance_id: str) -> str:
         """
-        Player-facing short ref: prefer compact ``OBJ-014-0001`` (VEN code + seq).
+        Player-facing short ref.
 
-        Digits are stored per prime; code/slug is joined at read time.
+        DOS office: ``com-7f3a2c`` bare when singleton or copy 1;
+        ``com-7f3a2c.2`` for later copies. Digits stored per prime on the
+        instance; face is joined at read time.
         """
         st = self.instance_state(instance_id)
         raw = str(st.get("short_ref") or "").strip()
@@ -906,8 +908,12 @@ class World:
             st["short_ref"] = dig
             self.set_instance_state(instance_id, st)
         slug = inst.ven_slug or inst.ven_name or "ITEM"
+        living = len(self.list_instances_of_ven(inst.ven_id))
         return format_instance_short_ref(
-            slug, dig, ven_code=inst.ven_code
+            slug,
+            dig,
+            ven_code=inst.ven_code,
+            singleton=living <= 1,
         )
 
     def short_ref_matches(self, instance_id: str, query_ref: str) -> bool:

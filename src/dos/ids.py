@@ -8,13 +8,20 @@ import uuid
 # Canonical display/slug shape: SILVER-THREAD, PRIME, HALL-OF-SHELVED-YEARS
 _CUTE_RE = re.compile(r"^[A-Z0-9]+(-[A-Z0-9]+)*$")
 
-# Compact VEN code: 3-letter kind prefix + 3-digit seq (RLM-001, OBJ-014)
-# Parse accepts 1–4 digits; canonical form is zero-padded to 3 when ≤999
-_VEN_CODE_RE = re.compile(r"^([A-Z]{3})-(\d{1,4})$", re.IGNORECASE)
-# Instance short ref built on a ven code: RLM-001-0001
+# Legacy compact VEN code: 3-letter kind prefix + 3-digit seq (RLM-001, OBJ-014)
+_VEN_CODE_LEGACY_RE = re.compile(r"^([A-Z]{3})-(\d{1,4})$", re.IGNORECASE)
+_VEN_CODE_RE = _VEN_CODE_LEGACY_RE  # alias for older imports
+# Instance short ref built on a legacy ven code: RLM-001-0001
 _VEN_CODE_INST_RE = re.compile(
     r"^([A-Z]{3})-(\d{1,4})-(\d{1,4})$", re.IGNORECASE
 )
+# DOS office face codes: 3 from cute-slug + hex entropy (com-7f3a2c)
+# Optional instance trailer: com-7f3a2c.2  (no .1 — bare is first/only)
+_OFFICE_VEN_CODE_RE = re.compile(
+    r"^([a-z0-9]{2,4})-([0-9a-f]{4,12})(?:\.(\d+))?$",
+    re.IGNORECASE,
+)
+_OFFICE_HEX_LEN = 6  # token_hex(3)
 
 # Kind → typeable 3-letter prefix (stable; used for VEN codes)
 KIND_CODE_PREFIX: dict[str, str] = {
@@ -50,21 +57,72 @@ def kind_code_prefix(kind: str) -> str:
 
 
 def format_ven_code(prefix: str, n: int) -> str:
-    """XXX-NNN with zero-padded sequence."""
+    """Legacy XXX-NNN with zero-padded sequence (history HST, old worlds)."""
     p = (prefix or "OTH").strip().upper()[:3].ljust(3, "X")
     if n < 1:
         n = 1
     if n > 999:
-        # Overflow: still valid shape, more digits after dash
         return f"{p}-{n}"
     return f"{p}-{n:03d}"
+
+
+def slug_face_prefix(slug_or_name: str) -> str:
+    """
+    First 3 chars of the cute-slug (letters/digits only), lowercase.
+
+    ``Company Handbook`` / ``COMPANY-HANDBOOK`` → ``com``.
+    Pads with ``x`` if shorter than 3.
+    """
+    cute = cute_name(slug_or_name or "")
+    letters = re.sub(r"[^A-Z0-9]", "", cute)
+    if not letters:
+        letters = "xxx"
+    if len(letters) < 3:
+        letters = (letters + "xxx")[:3]
+    return letters[:3].lower()
+
+
+def mint_office_ven_code(
+    slug_or_name: str,
+    *,
+    taken: set[str] | None = None,
+) -> str:
+    """
+    DOS face code: ``{slug3}-{hex6}`` lowercase, e.g. ``com-7f3a2c``.
+
+    Entropy only — no genesis ordinal. *taken* is lowercased codes in use.
+    """
+    import secrets
+
+    prefix = slug_face_prefix(slug_or_name)
+    used = {t.lower() for t in (taken or set())}
+    for _ in range(64):
+        ent = secrets.token_hex(_OFFICE_HEX_LEN // 2)
+        code = f"{prefix}-{ent}"
+        if code not in used:
+            return code
+    # Extremely unlikely
+    return f"{prefix}-{secrets.token_hex(4)}"
+
+
+def is_office_ven_code(raw: str | None) -> bool:
+    """True if *raw* is a DOS office face code (not legacy RLM-001)."""
+    if raw is None:
+        return False
+    s = str(raw).strip().lstrip("#").lower()
+    m = _OFFICE_VEN_CODE_RE.fullmatch(s)
+    if not m:
+        return False
+    # Exclude pure legacy if somehow matched — legacy is LETTER-digits only
+    return bool(re.fullmatch(r"[0-9a-f]+", m.group(2)))
 
 
 def normalize_ref_separators(raw: str | None) -> str:
     """
     Soft code typing: spaces / underscores act like dashes.
 
-    ``bin 003 0043`` → ``BIN-003-0043``; ``BIN_003`` → ``BIN-003``.
+    Legacy: ``bin 003 0043`` → ``BIN-003-0043`` (upper).
+    Office codes are lowercased by :func:`parse_ven_code`.
     """
     if raw is None:
         return ""
@@ -79,19 +137,38 @@ def normalize_ref_separators(raw: str | None) -> str:
 
 def parse_ven_code(raw: str | None) -> str | None:
     """
-    Normalize a typed VEN code to canonical XXX-NNN, or None if not a code.
+    Normalize a typed VEN code, or None if not a code.
 
-    Accepts rlm-1, RLM-001, rlm001, ``bin 3``, ``BIN 003`` (spaces ok).
+    **DOS office:** ``com-7f3a2c`` / ``COM-7F3A2C`` → ``com-7f3a2c``
+    (optional ``.2`` trailer stripped for prime match).
+
+    **Legacy:** ``rlm-1``, ``RLM-001``, ``bin 3`` → ``RLM-001`` / ``BIN-003``.
     """
     if raw is None:
         return None
+    raw_s = str(raw).strip().lstrip("#")
+    if not raw_s:
+        return None
+    # Office face (lowercase canonical); strip instance .N for prime code
+    low = raw_s.lower().replace("_", "-")
+    low = re.sub(r"\s+", "-", low)
+    low = re.sub(r"-+", "-", low).strip("-")
+    m_off = _OFFICE_VEN_CODE_RE.fullmatch(low)
+    if m_off and re.fullmatch(r"[0-9a-f]+", m_off.group(2)):
+        return f"{m_off.group(1)}-{m_off.group(2)}"
+    # Bare office prime without instance: already handled; try without .N
+    if "." in low:
+        base = low.split(".", 1)[0]
+        m2 = re.fullmatch(r"([a-z0-9]{2,4})-([0-9a-f]{4,12})", base)
+        if m2:
+            return f"{m2.group(1)}-{m2.group(2)}"
+    # Legacy uppercase path
     s = normalize_ref_separators(raw)
     if not s:
         return None
-    m = _VEN_CODE_RE.fullmatch(s)
+    m = _VEN_CODE_LEGACY_RE.fullmatch(s)
     if m:
         return format_ven_code(m.group(1), int(m.group(2)))
-    # RLM001 without dash
     m2 = re.fullmatch(r"([A-Z]{3})(\d{1,4})", s)
     if m2:
         return format_ven_code(m2.group(1), int(m2.group(2)))
@@ -338,10 +415,20 @@ def names_match(query: str, candidate: str) -> bool:
 
 
 def format_instance_ref(n: int) -> str:
-    """Zero-padded sequential part only: 1 → 0001 (stored / matched)."""
+    """Zero-padded sequential part only (storage): 1 → 0001."""
     if n < 1:
         n = 1
     return f"{n:04d}"
+
+
+def instance_copy_number(n: int | str) -> int:
+    """Integer copy index from stored short_ref digits or int."""
+    if isinstance(n, int):
+        return max(1, n)
+    dig = digits_from_short_ref(str(n))
+    if dig:
+        return max(1, int(dig))
+    return 1
 
 
 def format_instance_short_ref(
@@ -349,21 +436,32 @@ def format_instance_short_ref(
     n: int | str,
     *,
     ven_code: str | None = None,
+    singleton: bool = False,
 ) -> str:
     """
     Player-facing short ref for an instance.
 
-    Prefer compact VEN code: ``OBJ-014-0001``.
-    Fallback (legacy): cute slug + digits ``FIELD-NOTES-0001``.
+    **DOS office codes** (``com-7f3a2c``):
+      - singleton or copy 1 → bare ``com-7f3a2c`` (no ``.1``)
+      - copy 2+ → ``com-7f3a2c.2``
+
+    **Legacy** (``OBJ-014``):
+      - ``OBJ-014-0001`` (old dash + zero-pad)
+
+    Fallback: cute slug + digits ``FIELD-NOTES-0001``.
     """
-    if isinstance(n, int):
-        digits = format_instance_ref(n)
-    else:
-        s = str(n).strip()
-        dig = digits_from_short_ref(s)
-        digits = dig if dig else format_instance_ref(1)
+    num = instance_copy_number(n)
+    digits = format_instance_ref(num)
     code = parse_ven_code(ven_code) if ven_code else None
+    if not code and ven_code:
+        code = str(ven_code).strip()
+    if code and is_office_ven_code(code):
+        face = code.lower()
+        if singleton or num <= 1:
+            return face
+        return f"{face}.{num}"
     if code:
+        # Legacy kind-serial
         return f"{code}-{digits}"
     base = cute_name(slug) if slug else "ITEM"
     return f"{base}-{digits}"
@@ -378,7 +476,17 @@ def digits_from_short_ref(raw: str | None) -> str | None:
         return None
     if s.isdigit():
         return format_instance_ref(int(s))
-    m = re.search(r"(\d+)$", s)
+    # Office trailer: com-7f3a2c.2  (bare office prime is copy 1 — no digits)
+    m_dot = re.search(r"\.(\d+)$", s)
+    if m_dot:
+        return format_instance_ref(int(m_dot.group(1)))
+    base = s.split(".", 1)[0]
+    if is_office_ven_code(base) or re.fullmatch(
+        r"[a-z0-9]{2,4}-[0-9a-f]{4,12}", base, re.IGNORECASE
+    ):
+        return None
+    # Legacy FOO-0001 / BIN-003-0001
+    m = re.search(r"-(\d{1,4})$", s)
     if m:
         return format_instance_ref(int(m.group(1)))
     return None
@@ -390,14 +498,27 @@ def parse_instance_ref_token(token: str) -> str | None:
 
     Accepts:
       #0001 / 0001 / #1 → digit form ``0001``
-      #FIELD-NOTES-0002 / FIELD-NOTES-0002 → composite ``FIELD-NOTES-0002``
-      BIN-003-0043 / bin 003 0043 / BIN 3 43 → ``BIN-003-0043``
+      com-7f3a2c / com-7f3a2c.2 → office face (canonical lower)
+      #FIELD-NOTES-0002 / FIELD-NOTES-0002 → composite
+      BIN-003-0043 / bin 003 0043 → legacy ``BIN-003-0043``
     """
     t = (token or "").strip()
     if t.startswith("#"):
         t = t[1:].strip()
     if not t:
         return None
+    # Office face first (lowercase path; allows .2)
+    low = t.lower().replace("_", "-")
+    low = re.sub(r"\s+", "-", low)
+    low = re.sub(r"-+", "-", low).strip("-")
+    m_off = _OFFICE_VEN_CODE_RE.fullmatch(low)
+    if m_off and re.fullmatch(r"[0-9a-f]+", m_off.group(2)):
+        prime = f"{m_off.group(1)}-{m_off.group(2)}"
+        if m_off.group(3):
+            return format_instance_short_ref(
+                prime, int(m_off.group(3)), ven_code=prime
+            )
+        return prime
     # Soft separators before digit-only check (multi-token codes)
     soft = normalize_ref_separators(t)
     if soft.isdigit():
@@ -416,7 +537,6 @@ def parse_instance_ref_token(token: str) -> str | None:
     m = re.fullmatch(r"(.+)-(\d+)$", soft)
     if m:
         slug_part, num = m.group(1), m.group(2)
-        # Prefer VEN-code composite when left side is a code
         left_code = parse_ven_code(slug_part)
         if left_code:
             return format_instance_short_ref(

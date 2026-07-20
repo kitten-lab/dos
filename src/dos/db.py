@@ -45,28 +45,26 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     if cols or "code" in {
         row[1] for row in conn.execute("PRAGMA table_info(vens)").fetchall()
     }:
-        from .ids import format_ven_code, kind_code_prefix, parse_ven_code
+        from .ids import mint_office_ven_code, parse_ven_code
 
         rows = conn.execute(
-            "SELECT id, kind, code FROM vens ORDER BY kind, created_at, id"
+            "SELECT id, kind, code, slug, name FROM vens "
+            "ORDER BY kind, created_at, id"
         ).fetchall()
-        # Track max seq per prefix from existing codes, then fill gaps
-        max_by_prefix: dict[str, int] = {}
-        for r in rows:
-            existing = parse_ven_code(r["code"] or "")
-            if existing:
-                pref, _, num = existing.partition("-")
-                try:
-                    max_by_prefix[pref] = max(max_by_prefix.get(pref, 0), int(num))
-                except ValueError:
-                    pass
+        taken = {
+            (r["code"] or "").strip().lower()
+            for r in rows
+            if (r["code"] or "").strip()
+        }
         for r in rows:
             if parse_ven_code(r["code"] or ""):
                 continue
-            pref = kind_code_prefix(r["kind"] or "other")
-            n = max_by_prefix.get(pref, 0) + 1
-            max_by_prefix[pref] = n
-            code = format_ven_code(pref, n)
+            # New / missing: office face from slug (not kind-serial genesis)
+            code = mint_office_ven_code(
+                r["slug"] or r["name"] or r["kind"] or "item",
+                taken=taken,
+            )
+            taken.add(code)
             conn.execute("UPDATE vens SET code = ? WHERE id = ?", (code, r["id"]))
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_vens_code ON vens(code)"
