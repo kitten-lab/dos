@@ -845,7 +845,9 @@ def _look(world: World, arg: str = "") -> str:
     lore_rows = list(info["lore"] or [])
     if deep:
         if lore_rows:
-            lore_block = _format_lore_rows(f"Records · {loc.name}", lore_rows)
+            lore_block = _format_lore_rows(
+                world, f"Records · {loc.name}", lore_rows
+            )
         else:
             lore_block = fmt.hint("No records for this place.")
     elif lore_rows:
@@ -2275,7 +2277,9 @@ def _examine(world: World, arg: str, *, deep: bool | None = None) -> str:
     lore_block = None
     if deep:
         if lore_rows:
-            lore_block = _format_lore_rows(f"Records · {thing.name}", lore_rows)
+            lore_block = _format_lore_rows(
+                world, f"Records · {thing.name}", lore_rows
+            )
         else:
             lore_block = fmt.hint("No related records.")
     elif lore_rows:
@@ -3662,11 +3666,50 @@ def parse_lore_add(rest: str) -> tuple[str, str, str | None] | None:
     return title, body, when_label
 
 
-def _lore_meta_line(row) -> str:
-    """Story when-stamp (if any) plus typed-at wall clock and author."""
+def _lore_author_display(world: World, row) -> str:
+    """
+    Poster face for a record: ``Name · face-code`` (multiuser-ready).
+
+    Uses author_ven_id / author_instance_id when present; falls back to
+    author text only (seed, dialog, legacy builder rows).
+    """
+    keys = row.keys() if hasattr(row, "keys") else []
+    name = ""
+    try:
+        name = (row["author"] or "").strip()
+    except (KeyError, IndexError, TypeError):
+        name = ""
+    if not name or name.lower() == "builder":
+        name = "unknown"
+    ven_id = None
+    inst_id = None
+    if "author_ven_id" in keys:
+        ven_id = row["author_ven_id"]
+    if "author_instance_id" in keys:
+        inst_id = row["author_instance_id"]
+    code = None
+    if ven_id:
+        ven = world.get_ven(str(ven_id))
+        if ven is not None and ven.code:
+            from .ids import parse_ven_code
+
+            code = parse_ven_code(ven.code) or ven.code
+    if not code and inst_id:
+        inst = world.get_instance(str(inst_id))
+        if inst is not None and inst.ven_code:
+            from .ids import parse_ven_code
+
+            code = parse_ven_code(inst.ven_code) or inst.ven_code
+    if code:
+        return f"{name} · {code}"
+    return name
+
+
+def _lore_meta_line(world: World, row) -> str:
+    """Story when-stamp (if any) plus typed-at wall clock and poster."""
     stamp = (row["when_label"] or "").strip()
     typed = row["created_at"] or ""
-    author = row["author"] or "builder"
+    author = _lore_author_display(world, row)
     if stamp:
         return f"{stamp}  ·  typed {typed}  ·  {author}"
     return f"typed {typed}  ·  {author}"
@@ -3745,7 +3788,7 @@ def _indent_lore_body(markup: str, *, spaces: int = 2) -> str:
     )
 
 
-def _format_dialog_lore_entry(row) -> str:
+def _format_dialog_lore_entry(world: World, row) -> str:
     """
     Compact, dim dialog-pointer row for lore lists.
 
@@ -3782,12 +3825,12 @@ def _format_dialog_lore_entry(row) -> str:
     detail = "  ·  ".join(bits)
     return (
         f"[bold]{fmt.safe(title)}[/bold]  "
-        f"[dim]{fmt.safe(_lore_meta_line(row))}[/dim]\n"
+        f"[dim]{fmt.safe(_lore_meta_line(world, row))}[/dim]\n"
         + _indent_lore_body(f"[dim]{fmt.safe(detail)}[/dim]")
     )
 
 
-def _format_lore_rows(heading: str, rows: list) -> str:
+def _format_lore_rows(world: World, heading: str, rows: list) -> str:
     if not rows:
         return fmt.hint(f"No records yet for {heading}.")
     # heading may include slug; title_line display_name's cute segments in the name part
@@ -3795,13 +3838,13 @@ def _format_lore_rows(heading: str, rows: list) -> str:
     for r in rows:
         author = (r["author"] or "").strip().lower()
         if author == "dialog":
-            blocks.append(_format_dialog_lore_entry(r))
+            blocks.append(_format_dialog_lore_entry(world, r))
             continue
         title = r["title"] or "Revision"
         # Title + meta at column 0; body two spaces deeper
         entry = fmt.join_blocks(
             f"[bold]{fmt.safe(title)}[/bold]  "
-            f"[dim]{fmt.safe(_lore_meta_line(r))}[/dim]",
+            f"[dim]{fmt.safe(_lore_meta_line(world, r))}[/dim]",
             _indent_lore_body(fmt.prose(r["body"])),
             gap=0,
         )
@@ -3988,7 +4031,6 @@ def _lore_add_from_book(world: World, rest: str) -> str:
         title=title,
         timeline_instance_id=loc.timeline_instance_id,
         when_label=None,
-        author="builder",
     )
     world.undo_stack.push(
         f"lore add from {book.name} {page_val}:{line_val}",
@@ -4039,7 +4081,6 @@ def _lore_on_instance(world: World, rest: str) -> str:
             title=title,
             timeline_instance_id=timeline_id,
             when_label=when_label,
-            author="builder",
         )
         world.undo_stack.push(
             f"record on {thing.name}",
@@ -4079,7 +4120,7 @@ def _lore_on_instance(world: World, rest: str) -> str:
             ),
             gap=0,
         )
-    return _format_lore_rows(heading, rows)
+    return _format_lore_rows(world, heading, rows)
 
 
 def _lore_add_flags(world: World, arg: str) -> str:
@@ -4168,7 +4209,6 @@ def _lore_add_flags(world: World, arg: str) -> str:
         title=title,
         timeline_instance_id=target_inst.timeline_instance_id,
         when_label=when_label,
-        author="builder",
     )
     world.undo_stack.push(
         f"lore add {display_name(target_inst.name)}",
@@ -4263,7 +4303,6 @@ def _lore(world: World, arg: str) -> str:
                 body=body,
                 title=title,
                 when_label=when_label,
-                author="builder",
             )
             world.undo_stack.push(
                 f"lore ven {ven.slug}",
@@ -4288,7 +4327,7 @@ def _lore(world: World, arg: str) -> str:
         if not ven:
             return fmt.err(f"No VEN matching {rest!r}.  Use vens to list slugs.")
         rows = world.lore_for("ven", ven.id)
-        return _format_lore_rows(f"{ven.name} [{ven.slug}]", rows)
+        return _format_lore_rows(world, f"{ven.name} [{ven.slug}]", rows)
 
     # ── any instance (item/person/…) ────────────────────────────────────
     if arg.lower().startswith("on "):
@@ -4319,7 +4358,6 @@ def _lore(world: World, arg: str) -> str:
             title=title,
             timeline_instance_id=loc.timeline_instance_id,
             when_label=when_label,
-            author="builder",
         )
         world.undo_stack.push(
             "lore add",
@@ -4350,7 +4388,7 @@ def _lore(world: World, arg: str) -> str:
         for r in rows:
             title = r["title"] or "(untitled)"
             snippet = (r["body"] or "")[:80]
-            lines.append(fmt.bullet(f"{title}", _lore_meta_line(r)))
+            lines.append(fmt.bullet(f"{title}", _lore_meta_line(world, r)))
             lines.append(f"      {fmt.safe(snippet)}")
         return "\n".join(lines)
 
@@ -4369,7 +4407,7 @@ def _lore(world: World, arg: str) -> str:
             "No lore for this place yet.  Use: lore add <body>  ·  "
             "record on <item> add …  ·  help record"
         )
-    return _format_lore_rows(loc.name, rows)
+    return _format_lore_rows(world, loc.name, rows)
 
 
 def _dig(world: World, arg: str) -> str:
@@ -4833,7 +4871,6 @@ def _desc_commit(
         field="description",
         title=tname,
         format=fmt_name if fmt_name in ("plain", "studio") else "plain",
-        author="builder",
         note=f"@desc commit story {story_when}",
     )
 
@@ -4852,7 +4889,6 @@ def _desc_commit(
             title=lore_title,
             timeline_instance_id=target.timeline_instance_id,
             when_label=when_label,
-            author="builder",
         )
         # Lore life-row (same story when); separate HST from desc act
         _record_subject_history(
@@ -5257,7 +5293,6 @@ def _text_restore(world: World, rev_q: str) -> str:
             sid,
             body=body,
             title=row["title"] or "Restored",
-            author="builder",
         )
         world.undo_stack.push(
             f"text restore lore {row['id']}",

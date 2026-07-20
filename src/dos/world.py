@@ -1525,6 +1525,41 @@ class World:
 
     # ── Lore ─────────────────────────────────────────────────────────────
 
+    def current_poster(self) -> dict[str, str | None]:
+        """
+        Who is filing a record right now (multiuser-ready).
+
+        Returns display *name*, *instance_id*, *ven_id*, and face *code*
+        (office code when present). Empty session → unknown / no ids.
+        """
+        from .ids import display_name as _dn
+
+        pid = self.player_id()
+        if not pid:
+            return {
+                "name": "unknown",
+                "instance_id": None,
+                "ven_id": None,
+                "code": None,
+            }
+        inst = self.get_instance(pid)
+        if inst is None:
+            return {
+                "name": "unknown",
+                "instance_id": None,
+                "ven_id": None,
+                "code": None,
+            }
+        code = None
+        if inst.ven_code:
+            code = parse_ven_code(inst.ven_code) or (inst.ven_code or "").strip()
+        return {
+            "name": _dn(inst.name) or "unknown",
+            "instance_id": inst.id,
+            "ven_id": inst.ven_id,
+            "code": code,
+        }
+
     def add_lore(
         self,
         subject_type: str,
@@ -1533,17 +1568,46 @@ class World:
         title: str = "",
         timeline_instance_id: str | None = None,
         when_label: str | None = None,
-        author: str = "builder",
+        author: str | None = None,
+        author_instance_id: str | None = None,
+        author_ven_id: str | None = None,
     ) -> str:
+        """
+        Append a record. Poster defaults to the current player (name + ids).
+
+        System labels: pass author=\"seed\" / \"dialog\" (and leave ids None).
+        Legacy author=\"builder\" is treated as “use current player”.
+        """
         if subject_type not in ("ven", "instance"):
             raise ValueError("subject_type must be 'ven' or 'instance'")
+        system = {"seed", "dialog", "system", "import"}
+        a = (author or "").strip()
+        if not a or a.lower() == "builder":
+            poster = self.current_poster()
+            a = str(poster["name"] or "unknown")
+            if author_instance_id is None:
+                author_instance_id = poster["instance_id"]  # type: ignore[assignment]
+            if author_ven_id is None:
+                author_ven_id = poster["ven_id"]  # type: ignore[assignment]
+        elif a.lower() in system:
+            # keep label; ids only if caller set them
+            pass
+        else:
+            # Explicit human name — still attach player ids when missing
+            if author_instance_id is None or author_ven_id is None:
+                poster = self.current_poster()
+                if author_instance_id is None:
+                    author_instance_id = poster["instance_id"]  # type: ignore[assignment]
+                if author_ven_id is None:
+                    author_ven_id = poster["ven_id"]  # type: ignore[assignment]
         lid = new_id("lore")
         self.conn.execute(
             """
             INSERT INTO lore_revisions(
                 id, subject_type, subject_id, timeline_instance_id,
-                when_label, title, body, author
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                when_label, title, body, author,
+                author_instance_id, author_ven_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lid,
@@ -1553,7 +1617,9 @@ class World:
                 when_label,
                 title,
                 body,
-                author,
+                a,
+                author_instance_id,
+                author_ven_id,
             ),
         )
         self.conn.commit()

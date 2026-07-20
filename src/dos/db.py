@@ -89,6 +89,22 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_ven_parts_part ON ven_parts(part_ven_id)"
     )
+    # Records poster: multiuser-ready author instance / ven ids
+    lore_info = conn.execute("PRAGMA table_info(lore_revisions)").fetchall()
+    if lore_info:
+        lore_cols = {row[1] for row in lore_info}
+        if "author_instance_id" not in lore_cols:
+            conn.execute(
+                "ALTER TABLE lore_revisions ADD COLUMN author_instance_id TEXT"
+            )
+        if "author_ven_id" not in lore_cols:
+            conn.execute(
+                "ALTER TABLE lore_revisions ADD COLUMN author_ven_id TEXT"
+            )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lore_author_inst "
+            "ON lore_revisions(author_instance_id)"
+        )
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS text_revisions (

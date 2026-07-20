@@ -106,12 +106,16 @@ CREATE TABLE IF NOT EXISTS lore_revisions (
     when_label          TEXT,
     title               TEXT NOT NULL DEFAULT '',
     body                TEXT NOT NULL,
-    author              TEXT NOT NULL DEFAULT 'builder',
+    -- Poster: display name at post time; multiuser-ready instance/ven ids
+    author              TEXT NOT NULL DEFAULT '',
+    author_instance_id  TEXT,
+    author_ven_id       TEXT,
     created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_lore_subject ON lore_revisions(subject_type, subject_id);
 CREATE INDEX IF NOT EXISTS idx_lore_timeline ON lore_revisions(timeline_instance_id);
+CREATE INDEX IF NOT EXISTS idx_lore_author_inst ON lore_revisions(author_instance_id);
 
 -- Completed dialog transcripts (talk sessions ended with /fin)
 CREATE TABLE IF NOT EXISTS dialogs (
