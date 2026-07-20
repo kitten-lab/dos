@@ -560,6 +560,7 @@ def _init_topics() -> None:
             _p(
                 "Pick things up into inventory. From the floor: take <thing>. "
                 "From a box (on the floor or already in inventory): take <thing> from <box>. "
+                "Empty a bin in one go: take all from <box> (or take * from …). "
                 "You do not “go into” a carried box — open it with examine, then take from it. "
                 "get is an alias for take. "
                 "Each take writes movement history on the thing (and on the box for take from). "
@@ -572,12 +573,24 @@ def _init_topics() -> None:
                 "Out of a container you can reach",
             ),
             fmt.example_line(
+                "take all from bucket",
+                "Pocket every direct takeable in the bin",
+            ),
+            fmt.example_line(
+                "take * from Outer",
+                "Same as take all from",
+            ),
+            fmt.example_line(
                 "take hope from keeper when @2",
                 "Story node on hope + give on keeper",
             ),
             fmt.example_line("get silver from box --when 0", "Flag form"),
             fmt.example_line("examine box", "See what is inside before taking"),
             fmt.example_line("history on silver", "Life of the instance"),
+            fmt.hint(
+                "take all is shallow: nested stuff stays inside a taken bin "
+                "(take the bin, then take all from it)."
+            ),
         ),
         "drop": _page(
             "drop",

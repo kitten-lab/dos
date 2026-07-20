@@ -1912,6 +1912,83 @@ def _player_instance(world: World) -> InstanceView | None:
     return world.get_instance(pid)
 
 
+def _take_all_from(
+    world: World,
+    cont: InstanceView,
+    *,
+    story_when: str,
+    node_index: int | None,
+) -> str:
+    """
+    take all from <bin> — pocket every *direct* takeable content.
+
+    Nested contents stay inside their parent bin if that bin is taken as a unit;
+    only the top layer of *cont* is emptied into inventory.
+    """
+    inside = list(world.contents(cont.id))
+    if not inside:
+        return fmt.hint(f"{cont.name} is empty.")
+
+    taken: list[str] = []
+    skipped: list[str] = []
+    player = _player_instance(world)
+    cname = display_name(cont.name)
+    last_code = ""
+
+    # Snapshot ids first — containment changes as we take
+    for item in inside:
+        if not world.takeable(item):
+            skipped.append(f"{item.name} ({item.ven_kind})")
+            continue
+        prior = world.container_of(item.id)
+        try:
+            world.take_from(item.id, cont.id)
+        except ValueError as e:
+            skipped.append(f"{item.name} ({e})")
+            continue
+        _push_put_undo(world, item.id, prior, f"take {item.name}")
+        tname = display_name(item.name)
+        last_code = _record_move_history(
+            world,
+            item,
+            verb="take",
+            story_when=story_when,
+            node_index=node_index,
+            note=f"from {cname} (all)",
+            also=cont,
+            also_verb="give",
+            also_note=f"gave {tname}",
+            extra_legs=[
+                (player, "receive", f"took {tname} from {cname}"),
+            ]
+            if player
+            else None,
+        )
+        taken.append(item.name)
+
+    if not taken:
+        bits = [
+            fmt.err(f"Nothing takeable in {cont.name}."),
+        ]
+        if skipped:
+            bits.append(
+                fmt.hint("Skipped: " + ", ".join(skipped))
+            )
+        return fmt.join_blocks(*bits, gap=0)
+
+    lines = [
+        fmt.ok(
+            f"Taken all · {len(taken)} from {cont.name}  ·  "
+            f"story {story_when}"
+            + (f"  ·  {last_code}" if last_code else "")
+        ),
+        fmt.hint("  " + ", ".join(display_name(n) for n in taken)),
+    ]
+    if skipped:
+        lines.append(fmt.hint("Skipped: " + ", ".join(skipped)))
+    return fmt.join_blocks(*lines, gap=0)
+
+
 def _take(world: World, arg: str) -> str:
     """
     take <thing>                 — from the place floor
@@ -1923,20 +2000,22 @@ def _take(world: World, arg: str) -> str:
 
     if not arg:
         return fmt.hint(
-            "Take what?  take <thing>  |  take <thing> from <box>  "
-            "[when @N | --when 0]"
+            "Take what?  take <thing>  |  take <thing> from <box>  |  "
+            "take all from <box>  [when @N | --when 0]"
         )
 
     arg, story_when, node_index = peel_when_anywhere(arg)
 
-    # take X from Y
+    # take X from Y  ·  take all from Y
     lower = arg.lower()
     if " from " in lower:
         idx = lower.rfind(" from ")
         thing_name = arg[:idx].strip()
         cont_name = arg[idx + 6 :].strip()
         if not thing_name or not cont_name:
-            return fmt.hint("Usage: take <thing> from <container>")
+            return fmt.hint(
+                "Usage: take <thing> from <container>  ·  take all from <container>"
+            )
         cont, cerr = _resolve_one(world, cont_name)
         if cerr or cont is None:
             return cerr or fmt.err(
@@ -1945,6 +2024,16 @@ def _take(world: World, arg: str) -> str:
             )
         if not world.is_reachable(cont.id):
             return fmt.err(f"{cont.name} is not within reach.")
+
+        # take all / * from <bin> — pocket every takeable direct content
+        if thing_name.lower() in ("all", "*", "everything"):
+            return _take_all_from(
+                world,
+                cont,
+                story_when=story_when,
+                node_index=node_index,
+            )
+
         inside_hits = world.find_in_container_matches(cont.id, thing_name)
         if len(inside_hits) > 1:
             return _format_ambiguous(world, thing_name, inside_hits)

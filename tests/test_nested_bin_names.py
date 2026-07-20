@@ -86,6 +86,30 @@ class NestedBinNameTests(unittest.TestCase):
         self.assertTrue(r.ok, msg=r.message)
         self.assertIn("Inner", plain(r.message))
 
+    def test_take_all_from_bin(self) -> None:
+        self.assertTrue(dispatch(self.world, "put Q1 Report in Inner").ok)
+        # also a second loose thing into Outer
+        self.assertTrue(dispatch(self.world, "create thing Sticky").ok)
+        self.assertTrue(dispatch(self.world, "spawn sticky as Note Pad").ok)
+        self.assertTrue(dispatch(self.world, "put Note Pad in Outer").ok)
+        # Outer holds: Inner (bin) + Note Pad; Inner still holds Q1 Report
+        r = dispatch(self.world, "take all from Outer")
+        self.assertTrue(r.ok, msg=r.message)
+        text = plain(r.message)
+        self.assertIn("Taken all", text)
+        self.assertIn("Inner", text)
+        self.assertIn("Note Pad", text)
+        # Report stayed inside Inner (bin taken as a unit)
+        inv = plain(dispatch(self.world, "inv").message)
+        self.assertIn("Inner", inv)
+        self.assertIn("Note Pad", inv)
+        # Report still in Inner
+        r2 = dispatch(self.world, "take all from Inner")
+        self.assertTrue(r2.ok, msg=r2.message)
+        self.assertIn("Q1 Report", plain(r2.message))
+        inv2 = plain(dispatch(self.world, "inv").message)
+        self.assertIn("Q1 Report", inv2)
+
 
 if __name__ == "__main__":
     unittest.main()
