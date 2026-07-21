@@ -25,8 +25,8 @@ LABEL_WIDTH = 10
 KIND_COLORS: dict[str, str] = {
     "person": "yellow",
     "place": "bright_white",
-    "bin": "bright_cyan",
-    "container": "bright_cyan",  # legacy kind color
+    "bin": "bright_white",  # solid white furniture labels
+    "container": "bright_white",  # legacy kind color
     "thing": "bright_yellow",
     "folio": "bright_yellow",
     "symbol": "white",

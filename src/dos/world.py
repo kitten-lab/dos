@@ -538,7 +538,12 @@ class World:
 
         Returns (instance_id, tdf_code).
         """
-        from .tdf import build_ticket_description, normalize_ticket_data
+        from .tdf import (
+            build_ticket_description,
+            canonical_ticket_subtype,
+            is_assignment_subtype,
+            normalize_ticket_data,
+        )
 
         loc = self.player_location()
         dest = into_instance_id
@@ -547,9 +552,16 @@ class World:
                 raise ValueError("Nowhere to print — dig or go somewhere first.")
             dest = loc.id
 
-        subtype_n = (subtype or "").strip().lower() or "date"
-        # Empty kind is allowed (notes); do not force "range" on every slip
-        kind_n = (kind or "").strip().lower()
+        subtype_n = canonical_ticket_subtype(subtype) or (
+            (subtype or "").strip().lower() or "date"
+        )
+        # Assignment -k is free staffer role (preserve case); others lower
+        kind_raw = (kind or "").strip()
+        kind_n = (
+            kind_raw
+            if is_assignment_subtype(subtype_n)
+            else kind_raw.lower()
+        )
         title = normalize_instance_title(name)
         payload = normalize_ticket_data(subtype_n, kind_n, description, data)
         desc = (description or "").strip() or build_ticket_description(
@@ -2462,6 +2474,120 @@ class World:
             return hits[0]
         return None
 
+    # ── Off Duty: soft-shelve for people (not Lost Dept) ──────────────────
+    OFF_DUTY_NAME = "Off Duty"
+    OFF_DUTY_SLUG = "OFF-DUTY"
+
+    def ensure_off_duty(self) -> InstanceView:
+        """Mythic lounge for staff who are not on the floor right now."""
+        ven = self.get_ven_by_slug(self.OFF_DUTY_SLUG)
+        if ven is None:
+            ven = self.find_ven(self.OFF_DUTY_NAME)
+        if ven is None or ven.kind != "place":
+            ven_id = self.create_ven(
+                self.OFF_DUTY_NAME,
+                "place",
+                description=(
+                    "A quiet break room off the main corridors. Staff clock out "
+                    "here when they are not on the floor — not fired, just Off Duty. "
+                    "Bring them back with onduty / reclaim."
+                ),
+                tags=["mythic", "staff", "off-duty"],
+            )
+            ven = self.get_ven(ven_id)
+            assert ven is not None
+        row = self.conn.execute(
+            "SELECT id FROM instances WHERE ven_id = ? ORDER BY created_at LIMIT 1",
+            (ven.id,),
+        ).fetchone()
+        if row:
+            inst = self.get_instance(row["id"])
+            assert inst is not None
+            return inst
+        inst_id = self.instantiate(ven.id)
+        inst = self.get_instance(inst_id)
+        assert inst is not None
+        return inst
+
+    def is_off_duty(self, instance_id: str) -> bool:
+        inst = self.get_instance(instance_id)
+        if inst is None:
+            return False
+        return (
+            cute_name(inst.ven_slug or "") == self.OFF_DUTY_SLUG
+            or cute_name(inst.ven_name or "") == cute_name(self.OFF_DUTY_NAME)
+            or cute_name(inst.name or "") == cute_name(self.OFF_DUTY_NAME)
+        )
+
+    def send_off_duty(self, instance_id: str) -> tuple[str, str]:
+        """
+        Soft-despawn a *person* into Off Duty (not Lost Dept).
+
+        Returns (off_duty_instance_id, prior_container_id_or_empty).
+        """
+        item = self.get_instance(instance_id)
+        if item is None:
+            raise ValueError("No such person")
+        pid = self.player_id()
+        if pid and instance_id == pid:
+            raise ValueError("Cannot send yourself Off Duty (you are the operator)")
+        if (item.ven_kind or "").lower() != "person":
+            raise ValueError(
+                f"Only people go Off Duty (use despawn for {item.ven_kind}s → Lost Dept)"
+            )
+        if self.is_off_duty(instance_id):
+            raise ValueError("Cannot shelve the Off Duty lounge itself")
+        if self.is_lost_dept(instance_id):
+            raise ValueError("Cannot send Lost Dept Off Duty")
+        # Don't shelve something that contains the player
+        if pid:
+            cont = self.container_of(pid)
+            while cont:
+                if cont[0] == instance_id:
+                    raise ValueError("Cannot shelve someone who holds you")
+                cont = self.container_of(cont[0])
+        prior = self.container_of(instance_id)
+        prior_id = prior[0] if prior else ""
+        lounge = self.ensure_off_duty()
+        if prior and prior[0] == lounge.id:
+            raise ValueError("That person is already Off Duty")
+        self.put_in(instance_id, lounge.id, slot="interior")
+        return lounge.id, prior_id
+
+    def recall_on_duty(self, instance_id: str) -> None:
+        """Pull a person from Off Duty onto the current place floor."""
+        item = self.get_instance(instance_id)
+        if item is None:
+            raise ValueError("No such person")
+        cont = self.container_of(instance_id)
+        if cont is None or not self.is_off_duty(cont[0]):
+            raise ValueError("That person is not Off Duty")
+        if (item.ven_kind or "").lower() != "person":
+            raise ValueError(f"Cannot clock in a {item.ven_kind}")
+        loc = self.player_location()
+        if not loc:
+            raise ValueError("Nowhere to place them — dig or go somewhere first")
+        self.put_in(instance_id, loc.id, slot="interior")
+
+    def list_off_duty_contents(self) -> list[InstanceView]:
+        lounge = self.ensure_off_duty()
+        return self.contents(lounge.id)
+
+    def find_off_duty_named(self, name: str) -> InstanceView | None:
+        """Resolve a unique name among Off Duty staff."""
+        key = (name or "").strip()
+        if not key:
+            return None
+        hits: list[InstanceView] = []
+        for c in self.list_off_duty_contents():
+            if names_match(key, c.name) or names_match(key, c.ven_name) or names_match(
+                key, c.ven_slug
+            ):
+                hits.append(c)
+        if len(hits) == 1:
+            return hits[0]
+        return None
+
     def take(self, item_instance_id: str) -> None:
         """Take from the current place floor into inventory."""
         pid = self.player_id()
@@ -2640,9 +2766,192 @@ class World:
         self.conn.execute("DELETE FROM instances WHERE id = ?", (instance_id,))
         self.conn.commit()
 
+    def snapshot_instance(self, instance_id: str) -> dict[str, Any] | None:
+        """
+        Full row + containment for undo of hard delete (e.g. destroy ticket).
+
+        Does not snapshot nested contents / lore / books — enough for TDF slips.
+        """
+        row = self.conn.execute(
+            "SELECT * FROM instances WHERE id = ?",
+            (instance_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        cont = self.container_of(instance_id)
+        return {
+            "id": row["id"],
+            "ven_id": row["ven_id"],
+            "name_override": row["name_override"],
+            "description_override": row["description_override"],
+            "realm_instance_id": row["realm_instance_id"],
+            "timeline_instance_id": row["timeline_instance_id"],
+            "state_json": row["state_json"],
+            "became_prime_ven_id": row["became_prime_ven_id"]
+            if "became_prime_ven_id" in row.keys()
+            else None,
+            "created_at": row["created_at"],
+            "container_id": cont[0] if cont else None,
+            "slot": cont[1] if cont else None,
+        }
+
+    def restore_instance_snapshot(self, snap: dict[str, Any]) -> str:
+        """Re-insert a snapshotted instance (same id) and restore containment."""
+        iid = snap["id"]
+        # Prefer full row restore when created_at was snapshotted
+        if snap.get("created_at"):
+            self.conn.execute(
+                """
+                INSERT OR REPLACE INTO instances(
+                    id, ven_id, name_override, description_override,
+                    realm_instance_id, timeline_instance_id, state_json,
+                    became_prime_ven_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    iid,
+                    snap["ven_id"],
+                    snap.get("name_override"),
+                    snap.get("description_override"),
+                    snap.get("realm_instance_id"),
+                    snap.get("timeline_instance_id"),
+                    snap.get("state_json") or "{}",
+                    snap.get("became_prime_ven_id"),
+                    snap["created_at"],
+                ),
+            )
+        else:
+            self.conn.execute(
+                """
+                INSERT OR REPLACE INTO instances(
+                    id, ven_id, name_override, description_override,
+                    realm_instance_id, timeline_instance_id, state_json,
+                    became_prime_ven_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    iid,
+                    snap["ven_id"],
+                    snap.get("name_override"),
+                    snap.get("description_override"),
+                    snap.get("realm_instance_id"),
+                    snap.get("timeline_instance_id"),
+                    snap.get("state_json") or "{}",
+                    snap.get("became_prime_ven_id"),
+                ),
+            )
+        self.conn.commit()
+        cid = snap.get("container_id")
+        if cid:
+            slot = snap.get("slot") or "interior"
+            try:
+                self.put_in(iid, cid, slot=slot)
+            except Exception:  # noqa: BLE001 — container may be gone
+                loc = self.player_location()
+                if loc:
+                    self.put_in(iid, loc.id, slot="interior")
+        return iid
+
+    def destroy_tdf(self, instance_id: str) -> dict[str, Any]:
+        """
+        Hard-delete a Temporary Data Fragment slip.
+
+        Returns snapshot for undo. Raises if not a TDF.
+        """
+        if not self.is_tdf(instance_id):
+            raise ValueError("That is not a ticket / TDF slip")
+        snap = self.snapshot_instance(instance_id)
+        if snap is None:
+            raise ValueError("No such instance")
+        self.delete_instance(instance_id)
+        return snap
+
     def delete_ven(self, ven_id: str) -> None:
         self.conn.execute("DELETE FROM vens WHERE id = ?", (ven_id,))
         self.conn.commit()
+
+    def prime_nuke_blocked_reason(self, ven_id: str) -> str | None:
+        """
+        Why a prime cannot be nuked, or None if allowed (with confirmation).
+
+        Blocks: missing, self (player prime), place holding player, mythic
+        system places (Lost Dept / Off Duty).
+        """
+        ven = self.get_ven(ven_id)
+        if ven is None:
+            return "No such prime"
+        slug = cute_name(ven.slug or "")
+        name = cute_name(ven.name or "")
+        if slug == self.LOST_DEPT_SLUG or name == cute_name(self.LOST_DEPT_NAME):
+            return "Cannot nuke Lost Dept (system landfill)"
+        if slug == self.OFF_DUTY_SLUG or name == cute_name(self.OFF_DUTY_NAME):
+            return "Cannot nuke Off Duty (system staff lounge)"
+        pid = self.player_id()
+        for inst in self.list_instances_of_ven(ven_id):
+            if pid and inst.id == pid:
+                return "Cannot nuke the prime you are (player instance)"
+            if pid:
+                cont = self.container_of(pid)
+                while cont:
+                    if cont[0] == inst.id:
+                        return (
+                            f"Cannot nuke: you are inside {inst.name} "
+                            f"(leave or go elsewhere first)"
+                        )
+                    cont = self.container_of(cont[0])
+            # Place that is the player's location
+            if pid and (inst.ven_kind or "") == "place":
+                loc = self.player_location()
+                if loc and loc.id == inst.id:
+                    return (
+                        f"Cannot nuke: you are standing in {inst.name} "
+                        f"(go somewhere else first)"
+                    )
+        return None
+
+    def nuke_ven_prime(self, ven_id: str) -> dict[str, Any]:
+        """
+        Formally erase a prime VEN and all of its instances (hard delete).
+
+        Cascades containment/links via FK. Cleans lore rows for the prime and
+        its instances. **Not undoable.** Raises if blocked or missing.
+        """
+        ven = self.get_ven(ven_id)
+        if ven is None:
+            raise ValueError("No such prime")
+        blocked = self.prime_nuke_blocked_reason(ven_id)
+        if blocked:
+            raise ValueError(blocked)
+
+        insts = self.list_instances_of_ven(ven_id)
+        inst_ids = [i.id for i in insts]
+        n_inst = len(insts)
+        summary = {
+            "ven_id": ven.id,
+            "name": ven.name,
+            "slug": ven.slug,
+            "kind": ven.kind,
+            "code": ven.code or "",
+            "instances": n_inst,
+            "instance_ids": list(inst_ids),
+        }
+
+        # Lore on prime + lived copies (no FK cascade)
+        self.conn.execute(
+            "DELETE FROM lore_revisions WHERE subject_type = 'ven' AND subject_id = ?",
+            (ven_id,),
+        )
+        for iid in inst_ids:
+            self.conn.execute(
+                "DELETE FROM lore_revisions WHERE subject_type = 'instance' "
+                "AND subject_id = ?",
+                (iid,),
+            )
+        # Child primes keep living; parent_ven_id SET NULL on delete
+        # Instances CASCADE when prime goes
+        self.conn.execute("DELETE FROM vens WHERE id = ?", (ven_id,))
+        self.conn.commit()
+        return summary
 
     # ── Realm / timeline (layer) management ──────────────────────────────
 

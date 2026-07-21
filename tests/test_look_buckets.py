@@ -193,8 +193,8 @@ class LookPlacementTests(unittest.TestCase):
         self.assertIn("Coin", ex_td)
         self.assertIn("Nest", ex_td)
 
-    def test_presence_columns_are_name_prime_code(self) -> None:
-        """Look/examine rows: lived name · origin VEN · face code."""
+    def test_presence_columns_are_name_subtype_prime_code(self) -> None:
+        """Look/examine rows: lived name · subtype · origin VEN · face code."""
         self.assertTrue(
             dispatch(
                 self.world,
@@ -206,9 +206,11 @@ class LookPlacementTests(unittest.TestCase):
         ache = next(
             ln for ln in text.splitlines() if "Soft Ache" in ln or "Ache" in ln
         )
-        # No kind/subtype columns in the list grid
+        # Subtype alone as col2 — not kind/subtype mash
         self.assertNotIn("feeling/longing", ache)
         self.assertNotRegex(ache, r"\blonging\s+sense\b")
+        self.assertIn("longing", ache)
+        self.assertLess(ache.index("Soft Ache"), ache.index("longing"))
         # Office face code (slug3-hex), not legacy SNS-001-0001
         self.assertRegex(ache, r"[a-z0-9]{2,4}-[0-9a-f]{6}")
         # Lived name appears before origin prime when they differ
@@ -225,6 +227,65 @@ class LookPlacementTests(unittest.TestCase):
         # name first: Loud Hum before Bare Hum on the row
         self.assertLess(bare.index("Loud Hum"), bare.index("Bare Hum"))
         self.assertRegex(bare, r"[a-z0-9]{2,4}-[0-9a-f]{6}")
+
+    def test_bin_bucket_header_subtype_before_prime(self) -> None:
+        """Bin section title: name · subtype · prime · code (subtype is col2)."""
+        self.assertTrue(
+            dispatch(
+                self.world,
+                "create bin/drawer Filing | Sliding oak drawer.",
+            ).ok
+        )
+        self.assertTrue(
+            dispatch(self.world, "spawn filing as Active Drawer").ok
+        )
+        look = plain(dispatch(self.world, "look").message)
+        # Header line (section title), not a content row
+        hdr = next(
+            ln
+            for ln in look.splitlines()
+            if "Active Drawer" in ln and "·" in ln
+        )
+        self.assertIn("drawer", hdr)
+        self.assertIn("Filing", hdr)
+        # col order after name: subtype before root VEN name
+        self.assertLess(hdr.index("drawer"), hdr.index("Filing"))
+        # office face code still present
+        self.assertRegex(hdr, r"[a-z0-9]{2,4}-[0-9a-f]{6}")
+
+    def test_deep_item_row_subtype_before_prime(self) -> None:
+        """look --deep leaf rows: name · subtype · prime · code."""
+        self.assertTrue(
+            dispatch(self.world, "create bin Table | Oak.").ok
+        )
+        self.assertTrue(dispatch(self.world, "spawn table").ok)
+        self.assertTrue(
+            dispatch(self.world, "create bin Nest | Inner.").ok
+        )
+        self.assertTrue(dispatch(self.world, "spawn nest").ok)
+        self.assertTrue(
+            dispatch(
+                self.world,
+                "create thing/key Brass Key | Opens nothing important.",
+            ).ok
+        )
+        self.assertTrue(
+            dispatch(self.world, "spawn brass-key as Spare Key").ok
+        )
+        self.assertTrue(dispatch(self.world, "put nest in table").ok)
+        self.assertTrue(dispatch(self.world, "put spare key in nest").ok)
+
+        deep = plain(dispatch(self.world, "look --deep").message)
+        # Nested bin header under Table
+        self.assertIn("Nest", deep)
+        # Leaf item row under Nest
+        key_ln = next(ln for ln in deep.splitlines() if "Spare Key" in ln)
+        self.assertIn("key", key_ln)
+        self.assertIn("Brass Key", key_ln)
+        # name · subtype · prime
+        self.assertLess(key_ln.index("Spare Key"), key_ln.index("key"))
+        self.assertLess(key_ln.index("key"), key_ln.index("Brass Key"))
+        self.assertRegex(key_ln, r"[a-z0-9]{2,4}-[0-9a-f]{6}")
 
 
 class EventKindTests(unittest.TestCase):

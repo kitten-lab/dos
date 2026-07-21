@@ -149,6 +149,10 @@ def dispatch(world: World, line: str) -> CommandResult:
             return CommandResult(True, _text_cmd(world, arg))
         if cmd == "print":
             return CommandResult(True, _print_cmd(world, arg))
+        if cmd in ("destroy", "shred"):
+            return CommandResult(True, _destroy_cmd(world, arg))
+        if cmd in ("nuke", "purge"):
+            return CommandResult(True, _nuke_cmd(world, arg))
         if cmd == "create":
             return CommandResult(True, _create(world, arg))
         if cmd == "spawn":
@@ -163,12 +167,19 @@ def dispatch(world: World, line: str) -> CommandResult:
             return CommandResult(True, _retime(world, arg))
         if cmd in ("put", "install"):
             return CommandResult(True, _put(world, arg))
-        if cmd in ("despawn", "lose"):
+        if cmd in ("despawn", "lose", "offduty", "clockout", "clock-out"):
+            # bare offduty / clockout → staff list (like bare `lost`)
+            if cmd in ("offduty", "clockout", "clock-out") and not (arg or "").strip():
+                return CommandResult(True, _off_duty_list(world, arg))
             return CommandResult(True, _despawn(world, arg))
-        if cmd in ("reclaim", "unlose", "findlost"):
+        if cmd in ("dump", "empty"):
+            return CommandResult(True, _dump_cmd(world, arg))
+        if cmd in ("reclaim", "unlose", "findlost", "onduty", "clockin", "clock-in"):
             return CommandResult(True, _reclaim(world, arg))
         if cmd == "lost":
             return CommandResult(True, _lost_list(world, arg))
+        if cmd in ("off-duty", "offdutylist", "staff-out"):
+            return CommandResult(True, _off_duty_list(world, arg))
         if cmd == "elevate":
             return CommandResult(True, _elevate(world, arg))
         if cmd == "vens":
@@ -226,40 +237,63 @@ def _ticket_presence_fields(
     world: World, inst: InstanceView
 ) -> tuple[str, str, str, str, str, str]:
     """
-    Plain ticket columns (no markup)::
+    Plain ticket fields (no markup)::
 
       brick · code · name · data · subtype · kind
 
-    Brick is always ``[TICKET]`` (color = subtype). Subtype sits before kind.
-    Example: ``[TICKET]`` / ``TDF-…`` / title / ``July 21 2026`` / ``date`` / ``due``
+    Presence *row* order is separate (phase · name · brick · id).
+    Brick face = due-date / person name. Assignment -k is lead col, not brick.
     """
-    from .tdf import ticket_brick_plain, ticket_data_display
+    from .tdf import (
+        is_assignment_subtype,
+        ticket_brick_plain,
+        ticket_data_display,
+        ticket_staff_kind,
+    )
 
     payload = world.tdf_payload(inst.id) or {}
     sub = (payload.get("subtype") or "").strip().lower()
-    kind = (payload.get("kind") or "").strip().lower()
-    data = ticket_data_display(payload.get("data") or {})
+    # Preserve case for free staffer roles; lower only for non-assignment
+    kind_raw = (payload.get("kind") or "").strip()
+    kind = (
+        kind_raw
+        if is_assignment_subtype(sub)
+        else kind_raw.lower()
+    )
+    raw_data = (
+        payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    )
+    data = ticket_data_display(raw_data, subtype=sub)
     name = display_name(inst.name or "")
     code = (payload.get("code") or _presence_code(world, inst) or "").strip()
-    brick = ticket_brick_plain(sub)
+    brick = ticket_brick_plain(
+        sub, raw_data, data_display=data
+    )
+    # For assignment, surface staff role on the kind field for lead width
+    if is_assignment_subtype(sub):
+        role = ticket_staff_kind(raw_data, kind_raw)
+        if role:
+            kind = role
     return brick, code, name, data, sub, kind
 
 
 def _presence_row(
     inst: InstanceView, *, world: World | None = None
-) -> tuple[str, str, str, str]:
+) -> tuple[str, str, str, str, str]:
     """
     Plain columns for ordinary (non-ticket) look / examine lists::
 
-      name · prime · code · color_kind
+      name · subtype · prime · code · color_kind
 
-    Instance title first (what you call it), then origin VEN name.
+    Instance title first (what you call it), then subtype (when set),
+    then origin VEN name — same order as bin section headers.
     """
     name = display_name(inst.name or "")
+    sub = (inst.ven_subtype or "").strip()
     kind = (inst.ven_kind or "other").strip() or "other"
     prime = display_name(inst.ven_name or "") or "—"
     code = _presence_code(world, inst)
-    return name, prime, code, kind
+    return name, sub, prime, code, kind
 
 
 def _presence_column_widths(
@@ -267,17 +301,18 @@ def _presence_column_widths(
     *,
     world: World | None = None,
     deep: bool = False,
-) -> tuple[int, int, int, int, int, int, int, int, int]:
+) -> tuple[int, int, int, int, int, int, int, int, int, int, int]:
     """
     Widths for ordinary rows and ticket rows.
 
     Returns::
-      w_name, w_prime, w_code,
-      w_t_brick, w_t_code, w_t_name, w_t_data, w_t_sub, w_t_kind
+      w_name, w_sub, w_prime, w_code,
+      w_t_brick, w_t_code, w_t_name, w_t_data, w_t_phase, w_t_sub, w_t_kind
 
-    Subtype/kind widths are 0 when unused (column omitted).
+    Subtype/kind/phase widths are 0 when unused (column omitted).
     """
     names: list[str] = []
+    subs: list[str] = []
     primes: list[str] = []
     codes: list[str] = []
     t_bricks: list[str] = []
@@ -286,19 +321,41 @@ def _presence_column_widths(
     t_datas: list[str] = []
     t_subs: list[str] = []
     t_kinds: list[str] = []
+    t_leads: list[str] = []
+    has_date_ticket = False
 
     def _collect(inst: InstanceView) -> None:
+        nonlocal has_date_ticket
         if world is not None and world.is_tdf(inst.id):
+            from .tdf import is_assignment_subtype, ticket_staff_kind
+
             b, c, n, d, s, k = _ticket_presence_fields(world, inst)
             t_bricks.append(b)
             t_codes.append(c)
             t_names.append(n)
-            t_datas.append(d)
-            t_subs.append(s)
-            t_kinds.append(k)
+            # data / subtype / kind ride in brick face + tint — not list columns
+            if (s or "").strip().lower() == "date":
+                has_date_ticket = True
+            if is_assignment_subtype(s):
+                # k already carries staff role from _ticket_presence_fields
+                lead = (k or "").strip()
+                if not lead:
+                    payload = world.tdf_payload(inst.id) or {}
+                    data = (
+                        payload.get("data")
+                        if isinstance(payload.get("data"), dict)
+                        else {}
+                    )
+                    lead = ticket_staff_kind(data, payload.get("kind"))
+                if lead:
+                    t_leads.append(lead)
+                else:
+                    # Still reserve lead col for assignment rows
+                    t_leads.append("role")
             return
-        n, p, c, _ = _presence_row(inst, world=world)
+        n, s, p, c, _ = _presence_row(inst, world=world)
         names.append(n)
+        subs.append(s)
         primes.append(p)
         codes.append(c)
 
@@ -310,31 +367,89 @@ def _presence_column_widths(
                     _collect(ch)
 
     w_name = max((len(x) for x in names), default=4)
+    w_sub = max((len(x) for x in subs), default=0)
+    if not any(subs):
+        w_sub = 0
     w_prime = max((len(x) for x in primes), default=4)
     w_code = max((len(x) for x in codes), default=8)
     w_t_brick = max((len(x) for x in t_bricks), default=0)
     w_t_code = max((len(x) for x in t_codes), default=0)
     w_t_name = max((len(x) for x in t_names), default=0)
-    w_t_data = max((len(x) for x in t_datas), default=0)
-    if not any(t_datas):
-        w_t_data = 0
-    w_t_sub = max((len(x) for x in t_subs), default=0)
-    if not any(t_subs):
-        w_t_sub = 0
-    w_t_kind = max((len(x) for x in t_kinds), default=0)
-    if not any(t_kinds):
-        w_t_kind = 0
+    # data / subtype / kind not printed as columns (brick carries them)
+    w_t_data = 0
+    w_t_sub = 0
+    w_t_kind = 0
+    # Lead col: ACTIVE/OVER/NEXT and/or assignment staff roles
+    w_t_phase = 0
+    if has_date_ticket:
+        w_t_phase = max(w_t_phase, len("ACTIVE"))
+    if t_leads:
+        w_t_phase = max(w_t_phase, max(len(x) for x in t_leads))
     return (
         w_name,
+        w_sub,
         w_prime,
         w_code,
         w_t_brick,
         w_t_code,
         w_t_name,
         w_t_data,
+        w_t_phase,
         w_t_sub,
         w_t_kind,
     )
+
+
+def _ticket_lead_labels(
+    world: World, items: list[InstanceView]
+) -> dict[str, str]:
+    """
+    instance_id → lead column text for tickets in *items*.
+
+    Date: ACTIVE | OVER | NEXT (NEXT = soonest future start among peers).
+    Assignment: free staffer role from -k (lead, oncall, …).
+    """
+    from datetime import date
+
+    from .tdf import (
+        is_assignment_subtype,
+        next_upcoming_starts,
+        ticket_calendar_phase,
+        ticket_staff_kind,
+    )
+
+    today = date.today()
+    date_rows: list[tuple[str, dict]] = []
+    datas: list[dict | None] = []
+    out: dict[str, str] = {}
+    for it in items:
+        if not world.is_tdf(it.id):
+            continue
+        payload = world.tdf_payload(it.id) or {}
+        sub = (payload.get("subtype") or "").strip().lower()
+        data = (
+            payload.get("data")
+            if isinstance(payload.get("data"), dict)
+            else {}
+        )
+        if is_assignment_subtype(sub):
+            lead = ticket_staff_kind(data, payload.get("kind"))
+            # Always mark assignment rows so col1 shows the -k role
+            out[it.id] = lead or "—"
+            continue
+        if sub != "date":
+            continue
+        date_rows.append((it.id, data))
+        datas.append(data)
+    if date_rows:
+        next_starts = next_upcoming_starts(datas, today=today)
+        for iid, data in date_rows:
+            phase = ticket_calendar_phase(
+                data, today=today, next_starts=next_starts
+            )
+            if phase:
+                out[iid] = phase
+    return out
 
 
 def _is_placement_bin(inst: InstanceView) -> bool:
@@ -342,6 +457,41 @@ def _is_placement_bin(inst: InstanceView) -> bool:
     from .world import BIN_KINDS
 
     return (inst.ven_kind or "").strip().lower() in BIN_KINDS
+
+
+def _sort_placement_items(
+    world: World, items: list[InstanceView]
+) -> list[InstanceView]:
+    """
+    Presence list order: non-tickets keep put order; tickets follow,
+    sorted by subtype (date · label · note · tag) then date for date slips.
+    """
+    from .tdf import ticket_list_sort_key
+
+    non: list[InstanceView] = []
+    tickets: list[InstanceView] = []
+    for it in items:
+        if world.is_tdf(it.id):
+            tickets.append(it)
+        else:
+            non.append(it)
+    if not tickets:
+        return list(items)
+
+    def _key(inst: InstanceView) -> tuple:
+        payload = world.tdf_payload(inst.id) or {}
+        sub = (payload.get("subtype") or "").strip().lower()
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        code = str(payload.get("code") or "").strip()
+        return ticket_list_sort_key(
+            sub,
+            data,
+            name=inst.name or "",
+            code=code,
+        )
+
+    tickets.sort(key=_key)
+    return non + tickets
 
 
 def _placement_sections(
@@ -359,6 +509,7 @@ def _placement_sections(
     - Each **bin** among direct children → section named after that instance,
       listing **its** direct children only (shallow). Empty bins still
       appear (``show_if_empty`` True) so furniture is visible when bare.
+    - Tickets in each list sort by subtype, then date (for date tickets).
 
     *kids*: optional pre-filtered child list (e.g. inventory slot only).
     Nested bins are *rows* under a parent bucket on look; when you
@@ -379,10 +530,12 @@ def _placement_sections(
             loose.append(c)
     out: list[tuple[str, list[InstanceView], bool]] = []
     if loose:
-        out.append((fmt.section(loose_label), loose, False))
+        out.append(
+            (fmt.section(loose_label), _sort_placement_items(world, loose), False)
+        )
     for b in bins:
         header = _bin_bucket_header(b, world=world)
-        inner = list(world.contents(b.id))
+        inner = _sort_placement_items(world, list(world.contents(b.id)))
         out.append((header, inner, True))
     return out
 
@@ -395,15 +548,21 @@ def _bin_bucket_header(
     world: World | None = None,
 ) -> str:
     """
-    Bin section title: lived name + light prime + short ref code.
+    Bin section title (columns after bold name)::
 
+      name  ·  subtype  ·  prime  ·  code
+
+    Subtype is col2 when set (before root VEN name). Empty subtype is omitted.
     *nested*: inner bin under a parent bucket (``--deep``) — tree mark + indent
     so it reads as a bin, not a list row.
     """
     name = display_name(inst.name or "Bin")
+    sub = (inst.ven_subtype or "").strip()
     ven = display_name(inst.ven_name or "")
     code = _presence_code(world, inst)
     bits: list[str] = []
+    if sub:
+        bits.append(sub)
     if ven:
         bits.append(ven)
     if code and code != "—":
@@ -411,13 +570,12 @@ def _bin_bucket_header(
     lead = " " * max(0, indent)
     if nested:
         lead += "[dim]└─[/dim] "
+    # Solid white bin titles — stand out from dim prime/code trail
+    name_mk = f"[bold bright_white]{fmt.safe(name)}[/bold bright_white]"
     if not bits:
-        return f"{lead}[bold]{fmt.safe(name)}[/bold]"
+        return f"{lead}{name_mk}"
     trail = " · ".join(bits)
-    return (
-        f"{lead}[bold]{fmt.safe(name)}[/bold]"
-        f"  [dim]· {fmt.safe(trail)}[/dim]"
-    )
+    return f"{lead}{name_mk}  [dim]· {fmt.safe(trail)}[/dim]"
 
 
 def _format_ticket_presence_line(
@@ -430,32 +588,57 @@ def _format_ticket_presence_line(
     w_data: int,
     w_sub: int,
     w_kind: int,
+    w_phase: int = 0,
+    phase: str | None = None,
     indent: int = 2,
 ) -> str:
     """
     Ticket presence row (floor or in a bin)::
 
-      [TICKET]  TDF-…  Deadline…  July 21 2026  date  due
-      [TICKET]  TDF-…  The wait is over…               note
+      ACTIVE  Global Release  [Jan 20 → Feb 15]  TDF-…
+      NEXT    Next Gate       [2026-08-15]       TDF-…
+              Sticky          [remember milk]    TDF-…
+
+    Order: phase/role · name · data brick · tick id.
+    Assignment: col1 = -k staffer role, brick = person name only (never ass).
     """
-    from .tdf import ticket_brick_markup
+    from .tdf import is_assignment_subtype, ticket_brick_markup, ticket_phase_markup
 
     gap = "  "
-    brick_plain, code, name, data, sub, kind = _ticket_presence_fields(
+    brick_plain, code, name, data, sub, _kind = _ticket_presence_fields(
         world, inst
     )
-    brick_mk = ticket_brick_markup(sub)
+    # Assignment bricks tint by subtype (amber), not by role word as "phase"
+    brick_phase = None if is_assignment_subtype(sub) else phase
+    brick_mk = ticket_brick_markup(
+        sub,
+        data_display=data,
+        phase=brick_phase,
+    )
     brick_pad = max(0, w_brick - len(brick_plain))
-    line = f"{' ' * indent}{brick_mk}{' ' * brick_pad}{gap}"
-    line += f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]{gap}"
-    line += f"{fmt.colored_padded_name(name, 'ticket', w_name)}"
-    if w_data > 0:
-        line += f"{gap}[dim]{fmt.safe(fmt.pad_visible(data or '', w_data))}[/dim]"
-    # subtype before kind (color already on brick; text is the readable label)
-    if w_sub > 0:
-        line += f"{gap}[dim]{fmt.safe(fmt.pad_visible(sub or '', w_sub))}[/dim]"
-    if w_kind > 0:
-        line += f"{gap}[dim]{fmt.safe(fmt.pad_visible(kind or '', w_kind))}[/dim]"
+    # col1 phase · col2 name · col3 date brick · col4 tick id
+    line = f"{' ' * indent}"
+    if w_phase > 0:
+        plain_ph = phase or ""
+        pad = max(0, w_phase - len(plain_ph))
+        if plain_ph:
+            line += f"{ticket_phase_markup(plain_ph)}{' ' * pad}{gap}"
+        else:
+            line += f"{' ' * w_phase}{gap}"
+    line += (
+        f"{fmt.colored_padded_name(name, 'ticket', w_name)}{gap}"
+        f"{brick_mk}{' ' * brick_pad}{gap}"
+        f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]"
+    )
+    # Optional legacy data col (normally 0)
+    if w_data > 0 and data:
+        line += (
+            f"{gap}[bright_white]"
+            f"{fmt.safe(fmt.pad_visible(data or '', w_data))}"
+            f"[/bright_white]"
+        )
+    # subtype/kind intentionally not printed (w_sub / w_kind stay 0)
+    _ = (w_sub, w_kind)
     if world is not None:
         slot_row = world.container_of(inst.id)
         slot = (slot_row[1] if slot_row else "") or ""
@@ -470,16 +653,26 @@ def _format_presence_line(
     w_prime: int,
     w_name: int,
     w_code: int,
+    w_sub: int = 0,
     w_t_brick: int = 0,
     w_t_code: int = 0,
     w_t_name: int = 0,
     w_t_data: int = 0,
+    w_t_phase: int = 0,
     w_t_sub: int = 0,
     w_t_kind: int = 0,
     world: World | None = None,
     indent: int = 2,
+    name_color: str | None = None,
+    ticket_phase: str | None = None,
 ) -> str:
-    """One presence row: ordinary name·prime·code, or ticket brick layout."""
+    """
+    One presence row: ordinary name·subtype·prime·code, or ticket brick layout.
+
+    *name_color*: optional Rich color for the title (e.g. bright_cyan for
+    shallow nested bins you can open further). Default is kind color.
+    *ticket_phase*: ACTIVE / OVER / NEXT for date tickets (peer-aware).
+    """
     if world is not None and world.is_tdf(inst.id):
         return _format_ticket_presence_line(
             inst,
@@ -488,16 +681,25 @@ def _format_presence_line(
             w_code=max(w_t_code, 12),
             w_name=max(w_t_name, 8),
             w_data=w_t_data,
+            w_phase=w_t_phase,
+            phase=ticket_phase,
             w_sub=w_t_sub,
             w_kind=w_t_kind,
             indent=indent,
         )
     gap = "  "
-    name, prime, code, color_kind = _presence_row(inst, world=world)
-    # Instance title first (call name), then origin VEN, then face code
-    line = (
-        f"{' ' * indent}"
-        f"{fmt.colored_padded_name(name, color_kind, w_name)}{gap}"
+    name, sub, prime, code, color_kind = _presence_row(inst, world=world)
+    # name · subtype · prime · code (subtype col omitted when none in the grid)
+    if name_color:
+        shown = fmt.show_name(name)
+        pad = max(0, w_name - len(shown))
+        title = f"[{name_color}]{fmt.safe(shown)}[/{name_color}]" + (" " * pad)
+    else:
+        title = fmt.colored_padded_name(name, color_kind, w_name)
+    line = f"{' ' * indent}{title}{gap}"
+    if w_sub > 0:
+        line += f"[dim]{fmt.safe(fmt.pad_visible(sub or '', w_sub))}[/dim]{gap}"
+    line += (
         f"[dim]{fmt.safe(fmt.pad_visible(prime, w_prime))}[/dim]{gap}"
         f"[dim]{fmt.safe(fmt.pad_visible(code, w_code))}[/dim]"
     )
@@ -518,10 +720,12 @@ def _format_presence_section(
     w_name: int,
     w_prime: int,
     w_code: int,
+    w_sub: int = 0,
     w_t_brick: int = 0,
     w_t_code: int = 0,
     w_t_name: int = 0,
     w_t_data: int = 0,
+    w_t_phase: int = 0,
     w_t_sub: int = 0,
     w_t_kind: int = 0,
     show_if_empty: bool = False,
@@ -532,17 +736,20 @@ def _format_presence_section(
     One placement block — shared column grid::
 
       Here
-        Soft Ache      Soft Ache      sns-a1b2c3
-        [TICKET]  TDF-…  Deadline…  July 21  date  due
+        Soft Ache      longing    Soft Ache      sns-a1b2c3
+        ACTIVE  Deadline…  [July 21]  TDF-…
 
-      Outer  · Outer Cabinet · out-…
-        Inner             Inner Drawer    inn-…
-        Q1 Report         Report          rep-…
+      Outer  · drawer · Outer Cabinet · out-…
+        Inner             drawer   Inner Drawer    inn-…
+        Q1 Report                  Report          rep-…
 
-    Ordinary: **name** · prime · code (call name first).
-    Tickets: color brick · TDF id · title · [data] · subtype · [kind].
+    Ordinary: **name** · subtype · prime · code (subtype omitted if none).
+    Tickets: phase · title · **data brick** · TDF id.
+    Brick tint follows phase; subtype/kind left off the row.
+    Date-ticket phases use today's calendar date; NEXT is the soonest future
+    start among peers in the same list.
     *deep*: each listed **bin** becomes a nested bin header with its
-    contents underneath (one layer only).
+    contents underneath (one layer only) — leaf kids use the same item columns.
     """
     if not items:
         if not show_if_empty:
@@ -553,21 +760,35 @@ def _format_presence_section(
     nested_bins = [i for i in items if _is_placement_bin(i)]
 
     lines = [section_header]
+    phases = (
+        _ticket_lead_labels(world, loose) if world is not None else {}
+    )
 
-    def _row(inst: InstanceView, indent: int = 2) -> str:
+    def _row(
+        inst: InstanceView,
+        indent: int = 2,
+        *,
+        name_color: str | None = None,
+        phase_map: dict[str, str] | None = None,
+    ) -> str:
+        pm = phase_map if phase_map is not None else phases
         return _format_presence_line(
             inst,
             w_name=w_name,
+            w_sub=w_sub,
             w_prime=w_prime,
             w_code=w_code,
             w_t_brick=w_t_brick,
             w_t_code=w_t_code,
             w_t_name=w_t_name,
             w_t_data=w_t_data,
+            w_t_phase=w_t_phase,
             w_t_sub=w_t_sub,
             w_t_kind=w_t_kind,
             world=world,
             indent=indent,
+            name_color=name_color,
+            ticket_phase=pm.get(inst.id),
         )
 
     # Root / not-in-a-bin first
@@ -580,19 +801,40 @@ def _format_presence_section(
     if loose and nested_bins:
         lines.append("")  # blank line between root and bins
 
-    for inst in nested_bins:
+    for bi, inst in enumerate(nested_bins):
+        if bi > 0:
+            lines.append("")  # air between nested bin rows / deep bins
         if deep and world is not None:
             lines.append(
                 _bin_bucket_header(inst, indent=2, nested=True, world=world)
             )
-            kids = list(world.contents(inst.id))
+            kids = _sort_placement_items(
+                world, list(world.contents(inst.id))
+            )
             if not kids:
                 lines.append("      [dim](empty)[/dim]")
             else:
+                kid_phases = _ticket_lead_labels(world, kids)
                 for ch in kids:
-                    lines.append(_row(ch, 6))
+                    # Shallow leaf kids under an opened deep bin: cyan if
+                    # that kid is itself a bin (still closed — open further).
+                    if _is_placement_bin(ch):
+                        lines.append(
+                            _row(
+                                ch,
+                                6,
+                                name_color="bright_cyan",
+                                phase_map=kid_phases,
+                            )
+                        )
+                    else:
+                        lines.append(
+                            _row(ch, 6, phase_map=kid_phases)
+                        )
         else:
-            lines.append(_row(inst, 2))
+            # Shallow look: nested bins as list rows — cyan titles cue
+            # "examine / look in this" without expanding the tree.
+            lines.append(_row(inst, 2, name_color="bright_cyan"))
 
     return "\n".join(lines)
 
@@ -604,7 +846,12 @@ def _format_look_presence_blocks(
     world: World | None = None,
     deep: bool = False,
 ) -> list[str | None]:
-    """Format placement sections with one shared column grid."""
+    """
+    Format placement sections with one shared column grid.
+
+    Returns a single block with one blank line of air between each
+    Here / bin bucket so look / inv / examine lists can breathe.
+    """
     normalized: list[tuple[str, list[InstanceView], bool]] = []
     for entry in sections:
         if len(entry) == 3:
@@ -624,37 +871,47 @@ def _format_look_presence_blocks(
     if width_src:
         (
             w_name,
+            w_sub,
             w_prime,
             w_code,
             w_t_brick,
             w_t_code,
             w_t_name,
             w_t_data,
+            w_t_phase,
             w_t_sub,
             w_t_kind,
         ) = _presence_column_widths(width_src, world=world, deep=deep)
     else:
-        w_name, w_prime, w_code = 4, 4, 8
-        w_t_brick = w_t_code = w_t_name = w_t_data = w_t_sub = w_t_kind = 0
-    return [
-        _format_presence_section(
+        w_name, w_sub, w_prime, w_code = 4, 0, 4, 8
+        w_t_brick = w_t_code = w_t_name = w_t_data = w_t_phase = 0
+        w_t_sub = w_t_kind = 0
+    parts: list[str] = []
+    for title, items, show_empty in active:
+        block = _format_presence_section(
             title,
             items,
             w_name=w_name,
+            w_sub=w_sub,
             w_prime=w_prime,
             w_code=w_code,
             w_t_brick=w_t_brick,
             w_t_code=w_t_code,
             w_t_name=w_t_name,
             w_t_data=w_t_data,
+            w_t_phase=w_t_phase,
             w_t_sub=w_t_sub,
             w_t_kind=w_t_kind,
             show_if_empty=show_empty,
             world=world,
             deep=deep,
         )
-        for title, items, show_empty in active
-    ]
+        if block and block.strip():
+            parts.append(block.strip("\n"))
+    if not parts:
+        return []
+    # One empty line between Here / each bin list (not double-gapped later)
+    return ["\n\n".join(parts)]
 
 
 def _placement_has_runnable(
@@ -5733,20 +5990,220 @@ def _print_usage() -> str:
         "Usage:\n"
         "  print ticket -t date -k range -n Global Release Date "
         "-d Jan 20 - Feb 15 2026\n"
+        "  print ass -n Sprint Owner -d Joshua -k lead\n"
+        "  print assignment -n On-call -d Game Designer -k oncall\n"
+        "  destroy ticket <name|TDF-…>   hard-delete a slip (undo restores)\n"
         "\n"
         "Prints a Temporary Data Fragment (TDF) — a movable ticket slip.\n"
-        "  -t / --subtype   ticket subtype (date for calendars; also label, note)\n"
-        "  -k / --kind      range | due | state | point\n"
+        "  -t / --subtype   date | assignment | label | note | tag\n"
+        "  -k / --kind      date: range|due|… · assignment: free staffer role\n"
         "  -n / --name      title on the slip\n"
-        "  -d / --desc      body / date range text (bare - in ranges is ok)\n"
+        "  -d / --desc      date body / range · assignment: person instance or prime\n"
         "\n"
+        "Shortcuts: print ass …  ·  print assignment …  (staff assignment slips)\n"
+        "Remove: destroy ticket / shred ticket / destroy tdf <slip>\n"
         "Slips land in the current place; take / put / look work like other things.\n"
         "Id shape: TDF-######## (not a full VEN prime per slip)."
     )
 
 
+def _destroy_cmd(world: World, arg: str) -> str:
+    """
+    destroy ticket <name|TDF-…>  ·  shred ticket …
+    Hard-delete a TDF slip from the world. undo restores the slip.
+    """
+    raw = (arg or "").strip()
+    if not raw:
+        return fmt.hint(
+            "Usage: destroy ticket <name|TDF-…>  ·  shred ticket <slip>\n"
+            "  Hard-deletes a Temporary Data Fragment.  undo brings it back."
+        )
+    parts = raw.split(maxsplit=1)
+    what = parts[0].lower()
+    rest = parts[1].strip() if len(parts) > 1 else ""
+    if what not in (
+        "ticket",
+        "tdf",
+        "slip",
+        "ass",
+        "assignment",
+        "tag",
+    ):
+        # bare: destroy TDF-… / destroy Global Release
+        rest = raw
+        what = "ticket"
+    if not rest:
+        return fmt.hint(
+            f"Usage: destroy {what} <name|TDF-…>\n"
+            "  Example: destroy ticket Global Release  ·  shred tdf TDF-48291037"
+        )
+    return _destroy_ticket(world, rest)
+
+
+def _peel_confirmed(arg: str) -> tuple[str, bool]:
+    """
+    Strip confirmation tokens from *arg*.
+
+    Accepts: confirmed · confirm · --confirmed · -confirmed
+    Returns (remainder, confirmed).
+    """
+    raw = (arg or "").strip()
+    if not raw:
+        return "", False
+    parts = raw.split()
+    kept: list[str] = []
+    confirmed = False
+    for p in parts:
+        pl = p.lower()
+        if pl in ("confirmed", "confirm", "--confirmed", "-confirmed", "--confirm"):
+            confirmed = True
+            continue
+        kept.append(p)
+    return " ".join(kept).strip(), confirmed
+
+
+def _nuke_cmd(world: World, arg: str) -> str:
+    """
+    nuke <prime> confirmed  ·  purge ven <prime> confirmed
+
+    Formal hard-delete of a whole VEN prime and every instance. No undo.
+    """
+    raw = (arg or "").strip()
+    if not raw:
+        return fmt.hint(
+            "Usage: nuke <prime> confirmed\n"
+            "  purge ven <prime> confirmed  ·  nuke prime <slug|code|name> confirmed\n"
+            "  Erases the prime VEN and ALL of its instances.  Not undoable.\n"
+            "  You must type the word confirmed (safety)."
+        )
+
+    target, confirmed = _peel_confirmed(raw)
+    # Optional leading "ven" / "prime" / "ven prime"
+    tlow = target.lower()
+    for prefix in ("ven prime ", "prime ", "ven "):
+        if tlow.startswith(prefix):
+            target = target[len(prefix) :].strip()
+            tlow = target.lower()
+            break
+
+    if not target:
+        return fmt.hint(
+            "Nuke which prime?  nuke <name|slug|code> confirmed"
+        )
+
+    ven = world.find_ven(target)
+    if ven is None:
+        return fmt.err(
+            f"No prime matching {target!r}.  "
+            f"Try: vens  ·  nuke uses prime name / slug / face code."
+        )
+
+    insts = world.list_instances_of_ven(ven.id)
+    n = len(insts)
+    kind_bit = format_kind_label(ven.kind, ven.subtype)
+    code_bit = ven.code or "—"
+    name = display_name(ven.name)
+
+    blocked = world.prime_nuke_blocked_reason(ven.id)
+    if blocked:
+        return fmt.err(blocked)
+
+    if not confirmed:
+        # Formal brief — make them mean it
+        sample = ", ".join(
+            display_name(i.name) for i in insts[:5]
+        )
+        more = f"  ·  +{n - 5} more" if n > 5 else ""
+        inst_line = (
+            f"  Instances ({n}): {sample}{more}"
+            if n
+            else "  Instances: none (prime only)"
+        )
+        return fmt.join_blocks(
+            fmt.err(f"NUKE ARMED · {name}"),
+            fmt.hint(
+                f"  {kind_bit}  ·  {code_bit}  ·  {ven.slug}  ·  {ven.id}"
+            ),
+            fmt.hint(inst_line),
+            fmt.hint(
+                "This erases the prime and every instance — no undo, "
+                "not Lost Dept, not Off Duty."
+            ),
+            fmt.hint(
+                f"To proceed, type exactly:\n"
+                f"  nuke {ven.slug} confirmed"
+            ),
+            gap=0,
+        )
+
+    try:
+        summary = world.nuke_ven_prime(ven.id)
+    except ValueError as e:
+        return fmt.err(str(e))
+
+    return fmt.join_blocks(
+        fmt.ok(
+            f"Nuked prime · {display_name(summary['name'])}  ·  "
+            f"{summary.get('instances', 0)} instance(s) erased"
+        ),
+        fmt.hint(
+            f"  was {summary.get('kind')}  ·  {summary.get('code') or '—'}  ·  "
+            f"{summary.get('slug')}"
+        ),
+        fmt.hint("Gone from the catalog  ·  no undo"),
+        gap=0,
+    )
+
+
+def _destroy_ticket(world: World, arg: str) -> str:
+    """Hard-delete one reachable TDF instance; undo restores from snapshot."""
+    q = (arg or "").strip()
+    if not q:
+        return fmt.hint("Destroy which ticket?  destroy ticket <name|TDF-…>")
+
+    # Prefer TDF code, then reachable name
+    thing = world.find_instance_by_tdf_code(q)
+    if thing is None:
+        thing, err = _resolve_instance_target(world, q)
+        if thing is None:
+            thing2, err2 = _resolve_one(world, q)
+            thing = thing2
+            err = err or err2
+        if thing is None:
+            return err or fmt.err(f"No ticket matching {q!r}.")
+    if not world.is_tdf(thing.id):
+        return fmt.err(
+            f"{display_name(thing.name)} is not a ticket slip.  "
+            f"Only TDF prints can be destroyed this way  "
+            f"(use despawn for soft-shelve)."
+        )
+    if not world.is_reachable(thing.id):
+        # Still allow destroy if we found by code globally? Prefer reachable.
+        # TDF codes are unique — allow destroy even if nested deep / lost
+        pass
+
+    payload = world.tdf_payload(thing.id) or {}
+    code = (payload.get("code") or "").strip() or "TDF"
+    name = display_name(thing.name)
+
+    try:
+        snap = world.destroy_tdf(thing.id)
+    except ValueError as e:
+        return fmt.err(str(e))
+
+    def undo_destroy(w: World, snapshot: dict = snap) -> None:
+        w.restore_instance_snapshot(snapshot)
+
+    world.undo_stack.push(f"destroy ticket {code}", undo_destroy)
+    return fmt.join_blocks(
+        fmt.ok(f"Destroyed ticket · {name}  ·  {code}"),
+        fmt.hint("Hard-deleted  ·  undo restores the slip  ·  not in Lost Dept"),
+        gap=0,
+    )
+
+
 def _print_cmd(world: World, arg: str) -> str:
-    """print ticket … — receipt-style TDF slips for offices/calendars."""
+    """print ticket | ass | assignment … — receipt-style TDF slips."""
     raw = (arg or "").strip()
     if not raw:
         return fmt.hint(_print_usage())
@@ -5755,6 +6212,10 @@ def _print_cmd(world: World, arg: str) -> str:
     rest = parts[1] if len(parts) > 1 else ""
     if what in ("ticket", "tdf", "slip", "tag"):
         return _print_ticket(world, rest)
+    if what in ("ass", "assignment", "assign", "staff"):
+        # Force assignment subtype; allow extra -t to be overridden
+        forced = f"-t assignment {rest}".strip()
+        return _print_ticket(world, forced)
     return fmt.hint(
         f"Unknown print target {what!r}.\n" + _print_usage()
     )
@@ -5778,9 +6239,68 @@ _PRINT_TICKET_FLAG_ALIASES: dict[str, str] = {
 }
 
 
+def _resolve_assignment_assignee(
+    world: World, query: str
+) -> tuple[tuple[InstanceView | None, object] | None, str | None]:
+    """
+    Resolve -d for assignment slips: person **instance** first, else person prime.
+
+    Returns ((instance|None, ven), error_message).
+    Instance preferred so ``spawn Game Designer as Joshua`` can be assigned as Joshua.
+    """
+    q = (query or "").strip()
+    if not q:
+        return None, fmt.err("Assignment -d needs a person name.")
+
+    # 1) Reachable instance (here / inv / nested)
+    inst, _err = _resolve_one(world, q, kind="person")
+    if inst is not None and (inst.ven_kind or "").lower() == "person":
+        ven = world.get_ven(inst.ven_id)
+        if ven is not None:
+            return (inst, ven), None
+
+    # 2) Any resolve-here match that is a person (kind filter miss)
+    inst2, _e2 = _resolve_one(world, q)
+    if inst2 is not None and (inst2.ven_kind or "").lower() == "person":
+        ven = world.get_ven(inst2.ven_id)
+        if ven is not None:
+            return (inst2, ven), None
+
+    # 3) Global instance title / prime name (Off Duty, other rooms, …)
+    hits = world.find_instances_by_name(q, kind="person")
+    if len(hits) == 1:
+        ven = world.get_ven(hits[0].ven_id)
+        if ven is not None:
+            return (hits[0], ven), None
+    if len(hits) > 1:
+        return None, _format_ambiguous(world, q, hits)
+
+    # 4) Person prime VEN (no specific instance — role on the idea of them)
+    ven = world.find_ven(q)
+    if ven is not None:
+        if (ven.kind or "").lower() != "person":
+            return None, fmt.err(
+                f"{display_name(ven.name)} is a {ven.kind}, not a person.  "
+                f"Assignment -d must be a person instance or person prime."
+            )
+        return (None, ven), None
+
+    return None, fmt.err(
+        f"No person matching {q!r}.  "
+        f"Spawn someone: create person Game Designer · spawn as Joshua\n"
+        f"  then: print ass -n … -d Joshua -k lead"
+    )
+
+
 def _print_ticket(world: World, arg: str) -> str:
     from .argflags import parse_named_flags
-    from .tdf import TICKET_KINDS, TICKET_SUBTYPES
+    from .tdf import (
+        TICKET_KINDS,
+        TICKET_SUBTYPES,
+        canonical_ticket_subtype,
+        is_assignment_subtype,
+        ticket_data_display,
+    )
 
     arg = (arg or "").strip()
     if not arg:
@@ -5794,14 +6314,20 @@ def _print_ticket(world: World, arg: str) -> str:
     kind = parsed.get("kind")  # may be empty — default depends on subtype
     name = parsed.get("name")
     desc = parsed.get("desc")
+    subtype_l = canonical_ticket_subtype(subtype) or subtype.lower().strip()
+    is_ass = is_assignment_subtype(subtype_l)
 
-    # Recover range text after bare "-" tokens (shlex splits them out of -d)
+    # Recover range text after bare "-" tokens (shlex splits them out of -d).
+    # Assignment: never append strays to -d (avoids "Joshua ass" person queries).
     if parsed.positionals:
         extra = " ".join(parsed.positionals)
-        if desc:
+        if is_ass:
+            if not name and extra:
+                name = extra
+            # leftover positionals ignored for assignment person field
+        elif desc:
             desc = f"{desc} {extra}".strip()
         elif not name and len(parsed.positionals) >= 1:
-            # no -n: treat leading positionals as name if we still need one
             name = extra
         else:
             desc = (desc + " " + extra).strip() if desc else extra
@@ -5811,16 +6337,61 @@ def _print_ticket(world: World, arg: str) -> str:
             "print ticket needs -n / --name\n" + _print_usage()
         )
 
-    subtype_l = subtype.lower().strip()
-    kind_l = (kind or "").lower().strip()
-    # Defaults: dates → range; notes/labels → no kind column noise
-    if not kind_l:
-        kind_l = "range" if subtype_l in ("date", "") else ""
-    # Soft allow unknown subtypes/kinds (office vocabulary will grow)
-    if subtype_l not in TICKET_SUBTYPES and subtype_l:
-        pass  # allow custom
-    if kind_l not in TICKET_KINDS and kind_l:
-        pass
+    kind_raw = (kind or "").strip()
+    kind_l = kind_raw.lower()
+    extra_data: dict | None = None
+
+    if is_ass:
+        subtype_l = "assignment"
+        # -d: person *instance* (Joshua) or person prime (Game Designer)
+        person_q = (desc or "").strip()
+        if not person_q:
+            return fmt.err(
+                "print ass needs -d <person>  "
+                "(lived instance or person prime).\n"
+                + fmt.hint(
+                    "Example: print ass -n Sprint Owner -d Joshua -k lead\n"
+                    "  or: print ass -n Role -d Game Designer -k designer"
+                )
+            )
+        if not kind_raw:
+            return fmt.err(
+                "print ass needs -k <staffer type>  "
+                "(free text: lead, oncall, reviewer, …).  "
+                "That role is col1 on look rows."
+            )
+        assignee, aerr = _resolve_assignment_assignee(world, person_q)
+        if aerr or assignee is None:
+            return aerr or fmt.err(f"No person matching {person_q!r}.")
+        person_inst, person_ven = assignee
+        # Brick shows lived title when instance-bound, else prime name
+        face_name = (
+            display_name(person_inst.name)
+            if person_inst is not None
+            else display_name(person_ven.name)
+        )
+        kind_l = kind_raw
+        extra_data = {
+            "person_ven_id": person_ven.id,
+            "person_name": face_name,
+            "person_slug": person_ven.slug,
+            "person_prime": person_ven.name,
+            "staff_kind": kind_raw,
+            "raw": person_q,
+        }
+        if person_inst is not None:
+            extra_data["person_instance_id"] = person_inst.id
+            extra_data["person_ref"] = world.short_ref_of(person_inst.id)
+        desc = face_name
+    else:
+        # Defaults: dates → range; notes/labels → no kind column noise
+        if not kind_l:
+            kind_l = "range" if subtype_l in ("date", "") else ""
+        # Soft allow unknown subtypes/kinds (office vocabulary will grow)
+        if subtype_l not in TICKET_SUBTYPES and subtype_l:
+            pass  # allow custom
+        if kind_l not in TICKET_KINDS and kind_l:
+            pass
 
     try:
         inst_id, code = world.print_ticket(
@@ -5828,6 +6399,7 @@ def _print_ticket(world: World, arg: str) -> str:
             subtype=subtype_l,
             kind=kind_l,
             description=desc or "",
+            data=extra_data,
         )
     except ValueError as e:
         return fmt.err(str(e))
@@ -5839,7 +6411,13 @@ def _print_ticket(world: World, arg: str) -> str:
     start = (data.get("start") or "").strip()
     end = (data.get("end") or "").strip()
     range_bit = ""
-    if start and end:
+    if is_assignment_subtype(subtype_l):
+        range_bit = ticket_data_display(data)
+        if data.get("staff_kind"):
+            range_bit = f"{data.get('staff_kind')}  ·  {range_bit}".strip(
+                " ·"
+            )
+    elif start and end:
         range_bit = f"{start} → {end}"
     elif start:
         range_bit = start
@@ -6306,22 +6884,186 @@ def _instances(world: World, arg: str) -> str:
     return "\n".join(lines)
 
 
+def _dump_container_to_lost(
+    world: World,
+    cont: InstanceView,
+    *,
+    summary_label: str,
+    slot: str | None = None,
+) -> str:
+    """
+    Soft-despawn every *direct* takeable content of cont → Lost Dept.
+
+    Shallow: nested stuff stays inside a dumped bin (the bin is lost as a unit).
+    One undo restores all lost items to their prior containers.
+    When slot is set (e.g. inventory on the player), only that slot is emptied.
+    """
+    inside = list(world.contents(cont.id, slot=slot))
+    label = display_name(cont.name)
+    if slot == "inventory":
+        label = "inventory"
+    if not inside:
+        return fmt.hint(f"{label} is empty.")
+
+    lost_names: list[str] = []
+    skipped: list[str] = []
+    # (instance_id, prior_container_id|None, prior_slot)
+    priors: list[tuple[str, str | None, str]] = []
+    last_dept_id = ""
+
+    for item in inside:
+        if not world.takeable(item):
+            skipped.append(f"{item.name} ({item.ven_kind})")
+            continue
+        prior = world.container_of(item.id)
+        try:
+            dept_id, _ = world.lose_instance(item.id)
+        except ValueError as e:
+            skipped.append(f"{item.name} ({e})")
+            continue
+        last_dept_id = dept_id
+        priors.append(
+            (
+                item.id,
+                prior[0] if prior else None,
+                prior[1] if prior else "interior",
+            )
+        )
+        lost_names.append(item.name)
+
+    if not lost_names:
+        bits = [fmt.err(f"Nothing dumpable in {label}.")]
+        if skipped:
+            bits.append(fmt.hint("Skipped: " + ", ".join(skipped)))
+        return fmt.join_blocks(*bits, gap=0)
+
+    def undo_dump(
+        w: World,
+        restores: list[tuple[str, str | None, str]] = priors,
+    ) -> None:
+        for iid, prev_id, prev_slot in restores:
+            if prev_id is None:
+                loc = w.player_location()
+                if loc:
+                    w.put_in(iid, loc.id, slot="interior")
+                continue
+            w.put_in(iid, prev_id, slot=prev_slot)
+
+    world.undo_stack.push(summary_label, undo_dump)
+    dept = world.get_instance(last_dept_id) if last_dept_id else None
+    dname = display_name(dept.name) if dept else "Lost Dept"
+    lines = [
+        fmt.ok(f"Dumped · {len(lost_names)} from {label}  →  {dname}"),
+        fmt.hint("  " + ", ".join(display_name(n) for n in lost_names)),
+        fmt.hint("Not deleted  ·  lost  ·  reclaim <thing>  ·  undo"),
+    ]
+    if skipped:
+        lines.append(fmt.hint("Skipped: " + ", ".join(skipped)))
+    return fmt.join_blocks(*lines, gap=0)
+
+
+def _dump_cmd(world: World, arg: str) -> str:
+    """
+    dump / dump inv / dump inventory  — lose every direct carried item
+    dump from <bin> / dump all from <bin> / dump <bin>  — empty a bucket to Lost Dept
+
+    Soft only (Lost Dept). Rare / test-setup helper. Alias: empty …
+    """
+    raw = (arg or "").strip()
+    lower = raw.lower()
+
+    # dump  ·  dump inv  ·  dump inventory  ·  dump i
+    if not raw or lower in ("inv", "inventory", "i", "all", "*", "everything"):
+        player = _player_instance(world)
+        if player is None:
+            return fmt.err("No player set.")
+        return _dump_container_to_lost(
+            world,
+            player,
+            summary_label="dump inventory",
+            slot="inventory",
+        )
+
+    # dump from <bin>  ·  dump all from <bin>  ·  dump * from <bin>
+    cont_name = raw
+    if " from " in lower:
+        idx = lower.rfind(" from ")
+        left = raw[:idx].strip().lower()
+        cont_name = raw[idx + 6 :].strip()
+        if left and left not in ("all", "*", "everything", "inv", "inventory"):
+            return fmt.hint(
+                "Usage: dump  ·  dump inv  ·  dump from <bin>  ·  dump <bin>\n"
+                "  Soft-shelves direct contents to Lost Dept (not deleted)."
+            )
+        if not cont_name:
+            return fmt.hint("Usage: dump from <bin>")
+    elif lower.startswith("from "):
+        cont_name = raw[5:].strip()
+        if not cont_name:
+            return fmt.hint("Usage: dump from <bin>")
+
+    cont, cerr = _resolve_one(world, cont_name)
+    if cerr or cont is None:
+        return cerr or fmt.err(
+            f"No container {cont_name!r} here or in inventory.  "
+            f"Try: inv  ·  examine <name>"
+        )
+    if not world.is_reachable(cont.id):
+        return fmt.err(f"{display_name(cont.name)} is not within reach.")
+    # Don't "dump" a non-container thing by accident: still empty its direct kids
+    # if any; if it has none and isn't the player, clear message already.
+    return _dump_container_to_lost(
+        world,
+        cont,
+        summary_label=f"dump from {cont.name}",
+    )
+
+
 def _despawn(world: World, arg: str) -> str:
     """
-    Soft-despawn: move a reachable takeable instance into Lost Dept.
+    Soft-despawn:
+      things → Lost Dept
+      people → Off Duty
 
-    despawn <thing>  ·  lose <thing>
+    despawn <thing|person>  ·  lose <thing>  ·  offduty <person>  ·  clockout <person>
+    despawn all from <bin>  (things only)
     """
     if not arg.strip():
         return fmt.hint(
-            "Usage: despawn <thing>  ·  lose <thing>\n"
-            "  Sends the instance to Lost Dept (not deleted).  "
-            "List: lost  ·  Restore: reclaim <thing>"
+            "Usage: despawn <thing|person>  ·  lose <thing>  ·  offduty <person>\n"
+            "  Things → Lost Dept  ·  People → Off Duty\n"
+            "  despawn all from <bin>  ·  dump inv\n"
+            "  List: lost  ·  off-duty  ·  Restore: reclaim / onduty <name>"
         )
-    thing, err = _resolve_instance_target(world, arg.strip())
+
+    raw = arg.strip()
+    lower = raw.lower()
+
+    # despawn all from <bin>  ·  lose * from <bin>
+    if " from " in lower:
+        idx = lower.rfind(" from ")
+        left = raw[:idx].strip()
+        cont_name = raw[idx + 6 :].strip()
+        if left.lower() in ("all", "*", "everything") and cont_name:
+            cont, cerr = _resolve_one(world, cont_name)
+            if cerr or cont is None:
+                return cerr or fmt.err(
+                    f"No container {cont_name!r} here or in inventory."
+                )
+            if not world.is_reachable(cont.id):
+                return fmt.err(
+                    f"{display_name(cont.name)} is not within reach."
+                )
+            return _dump_container_to_lost(
+                world,
+                cont,
+                summary_label=f"despawn all from {cont.name}",
+            )
+
+    thing, err = _resolve_instance_target(world, raw)
     if err or thing is None:
         # Prefer reachable only for lose
-        thing2, err2 = _resolve_one(world, arg.strip())
+        thing2, err2 = _resolve_one(world, raw)
         if thing2 is None:
             return err or err2 or fmt.err(f"No match for {arg!r}.")
         thing = thing2
@@ -6332,8 +7074,12 @@ def _despawn(world: World, arg: str) -> str:
             f"Pick it up or stand where it is."
         )
     prior = world.container_of(thing.id)
+    is_person = (thing.ven_kind or "").lower() == "person"
     try:
-        dept_id, _prior_id = world.lose_instance(thing.id)
+        if is_person:
+            dest_id, _prior_id = world.send_off_duty(thing.id)
+        else:
+            dest_id, _prior_id = world.lose_instance(thing.id)
     except ValueError as e:
         return fmt.err(str(e))
 
@@ -6343,46 +7089,94 @@ def _despawn(world: World, arg: str) -> str:
         prev=prior,
     ) -> None:
         if prev is None:
-            # Drop onto current place floor if no prior container
             loc = w.player_location()
             if loc:
                 w.put_in(iid, loc.id, slot="interior")
             return
         w.put_in(iid, prev[0], slot=prev[1])
 
-    world.undo_stack.push(f"despawn {thing.name}", undo_lose)
-    dept = world.get_instance(dept_id)
-    dname = display_name(dept.name) if dept else "Lost Dept"
+    label = "offduty" if is_person else "despawn"
+    world.undo_stack.push(f"{label} {thing.name}", undo_lose)
+    dest = world.get_instance(dest_id)
+    dname = display_name(dest.name) if dest else (
+        "Off Duty" if is_person else "Lost Dept"
+    )
+    verb = "Off Duty" if is_person else "Lost"
+    restore = (
+        f"onduty {display_name(thing.name)}"
+        if is_person
+        else f"reclaim {display_name(thing.name)}"
+    )
+    list_cmd = "off-duty" if is_person else "lost"
     return fmt.join_blocks(
-        fmt.ok(f"Lost · {display_name(thing.name)}  →  {dname}"),
+        fmt.ok(f"{verb} · {display_name(thing.name)}  →  {dname}"),
         fmt.hint(
-            f"Not deleted  ·  lost  ·  reclaim {display_name(thing.name)}  ·  undo"
+            f"Not deleted  ·  {list_cmd}  ·  {restore}  ·  undo"
         ),
         gap=0,
     )
 
 
 def _reclaim(world: World, arg: str) -> str:
-    """Pull something out of Lost Dept into inventory."""
+    """
+    Pull something back into play:
+      Lost Dept things → inventory
+      Off Duty people → current place floor
+    """
     if not arg.strip():
         return fmt.hint(
-            "Usage: reclaim <thing>  ·  unlose <thing>\n"
-            "  Pulls from Lost Dept into inventory.  List: lost"
+            "Usage: reclaim <thing|person>  ·  onduty <person>  ·  unlose <thing>\n"
+            "  Things: Lost Dept → inventory  ·  list: lost\n"
+            "  People: Off Duty → here  ·  list: off-duty"
         )
     q = arg.strip()
+
+    # Prefer Off Duty people when onduty / clockin was the verb path — try both
+    person = world.find_off_duty_named(q)
     thing = world.find_lost_named(q)
-    if thing is None:
-        # ambiguous or missing
-        hits = [
-            c
-            for c in world.list_lost_contents()
-            if True  # collect for message
-        ]
-        names = [display_name(c.name) for c in hits[:12]]
-        return fmt.err(
-            f"No lost thing matching {q!r}."
-            + (f"  In Lost Dept: {', '.join(names)}" if names else "  lost  to list")
+
+    if person is not None and thing is None:
+        prior = world.container_of(person.id)
+        try:
+            world.recall_on_duty(person.id)
+        except ValueError as e:
+            return fmt.err(str(e))
+
+        def undo_onduty(w: World, iid=person.id, prev=prior) -> None:
+            if prev:
+                w.put_in(iid, prev[0], slot=prev[1])
+            else:
+                w.send_off_duty(iid)
+
+        world.undo_stack.push(f"onduty {person.name}", undo_onduty)
+        return fmt.join_blocks(
+            fmt.ok(
+                f"On duty · {display_name(person.name)}  →  here"
+            ),
+            fmt.hint(
+                "Back on the floor  ·  despawn / offduty to clock out again"
+            ),
+            gap=0,
         )
+
+    if thing is None and person is None:
+        lost_names = [display_name(c.name) for c in world.list_lost_contents()[:8]]
+        off_names = [
+            display_name(c.name) for c in world.list_off_duty_contents()[:8]
+        ]
+        bits = [fmt.err(f"No lost/off-duty match for {q!r}.")]
+        if lost_names:
+            bits.append(fmt.hint("Lost Dept: " + ", ".join(lost_names)))
+        if off_names:
+            bits.append(fmt.hint("Off Duty: " + ", ".join(off_names)))
+        if not lost_names and not off_names:
+            bits.append(fmt.hint("lost  ·  off-duty  to list"))
+        return fmt.join_blocks(*bits, gap=0)
+
+    if thing is None:
+        # only person matched already handled; both matched — prefer lost for things
+        return fmt.err(f"Ambiguous reclaim for {q!r}.")
+
     prior = world.container_of(thing.id)
     try:
         world.reclaim_instance(thing.id)
@@ -6424,6 +7218,40 @@ def _lost_list(world: World, arg: str = "") -> str:
                 )
             )
         lines.append(fmt.hint("reclaim <name>  ·  despawn <thing>  ·  undo"))
+    return "\n".join(lines)
+
+
+def _off_duty_list(world: World, arg: str = "") -> str:
+    """List staff currently Off Duty."""
+    lounge = world.ensure_off_duty()
+    items = world.list_off_duty_contents()
+    lines = [
+        fmt.title_line(
+            f"Off Duty · {display_name(lounge.name)}", kind="place"
+        ),
+        fmt.hint(
+            "Staff break room — not fired  ·  onduty <name>  ·  reclaim <name>"
+        ),
+    ]
+    if not items:
+        lines.append(
+            fmt.hint(
+                "(empty)  ·  despawn <person>  or  offduty <person>  to clock out"
+            )
+        )
+    else:
+        for it in items:
+            ref = world.short_ref_of(it.id)
+            lines.append(
+                fmt.bullet(
+                    it.name,
+                    f"{it.ven_kind}  ·  {display_name(it.ven_name)}  ·  #{ref}",
+                    kind=it.ven_kind,
+                )
+            )
+        lines.append(
+            fmt.hint("onduty <name>  ·  despawn <person>  ·  undo")
+        )
     return "\n".join(lines)
 
 

@@ -27,6 +27,10 @@ class OfficeCodeUnitTests(unittest.TestCase):
         self.assertEqual(slug_face_prefix("COMPANY-HANDBOOK"), "com")
         self.assertEqual(slug_face_prefix("Meeting Room"), "mee")
         self.assertEqual(slug_face_prefix("AB"), "abx")
+        # Multi-word: do not take first-3 of "Assigned" alone → ass
+        self.assertEqual(slug_face_prefix("Assigned Leads"), "asl")
+        self.assertEqual(slug_face_prefix("ASSIGNED-LEADS"), "asl")
+        self.assertNotEqual(slug_face_prefix("Assigned Leads"), "ass")
 
     def test_mint_shape(self) -> None:
         code = mint_office_ven_code("Company Handbook")

@@ -66,20 +66,106 @@ def format_ven_code(prefix: str, n: int) -> str:
     return f"{p}-{n:03d}"
 
 
-def slug_face_prefix(slug_or_name: str) -> str:
-    """
-    First 3 chars of the cute-slug (letters/digits only), lowercase.
+# Office face prefixes we refuse (accidental rude reads from first-3-of-name).
+# Keep short; only block the face *prefix*, not full names.
+_FACE_PREFIX_BLOCKLIST = frozenset(
+    {
+        "ass",
+        "azz",
+        "sex",
+        "fag",
+        "fuk",
+        "fuc",
+        "cum",
+        "tit",
+        "dic",
+        "dik",
+        "coc",
+        "cok",
+        "nig",
+        "nob",
+        "pis",
+        "shi",
+        "std",
+        "kkk",
+        "gay",
+        "jew",  # jewelry etc. — skip the accidental face
+        "rap",
+        "cnt",
+        "fgt",
+    }
+)
 
-    ``Company Handbook`` / ``COMPANY-HANDBOOK`` → ``com``.
-    Pads with ``x`` if shorter than 3.
-    """
-    cute = cute_name(slug_or_name or "")
-    letters = re.sub(r"[^A-Z0-9]", "", cute)
+
+def _normalize_face_prefix(raw: str) -> str:
+    """Lowercase alnum face prefix, pad/truncate to 3."""
+    letters = re.sub(r"[^a-z0-9]", "", (raw or "").lower())
     if not letters:
         letters = "xxx"
     if len(letters) < 3:
         letters = (letters + "xxx")[:3]
-    return letters[:3].lower()
+    return letters[:3]
+
+
+def slug_face_prefix(slug_or_name: str) -> str:
+    """
+    3-char office face prefix from the cute-slug (lowercase).
+
+    Prefers the first token's leading letters (``Company Handbook`` → ``com``).
+    Multi-word blends kick in when that would be unfortunate or too short
+    (``Assigned Leads`` → ``asl``, not ``ass``).
+
+    Pads with ``x`` if shorter than 3. Avoids a small blocklist of rude reads.
+    """
+    cute = cute_name(slug_or_name or "")
+    tokens = [
+        re.sub(r"[^A-Z0-9]", "", t) for t in cute.split("-") if t
+    ]
+    tokens = [t for t in tokens if t]
+    letters = "".join(tokens) if tokens else re.sub(r"[^A-Z0-9]", "", cute)
+
+    candidates: list[str] = []
+    if tokens:
+        t0 = tokens[0]
+        # Usual case: first 3 of first word (com from company)
+        if len(t0) >= 3:
+            candidates.append(t0[:3])
+        elif t0:
+            candidates.append(t0)
+        if len(tokens) >= 2:
+            t1 = tokens[1]
+            # Assigned Leads → asl / ale (not ass)
+            candidates.append((t0[:2] + t1[:1])[:3])
+            candidates.append((t0[:1] + t1[:2])[:3])
+            ini = "".join(t[0] for t in tokens[:3])
+            candidates.append(ini)
+        if len(tokens) >= 3:
+            candidates.append(
+                (tokens[0][:1] + tokens[1][:1] + tokens[2][:1])[:3]
+            )
+    if letters:
+        candidates.append(letters[:3])
+        # slide window / consonants as soft fallbacks
+        if len(letters) > 3:
+            candidates.append(letters[1:4])
+        cons = re.sub(r"[AEIOU]", "", letters)
+        if len(cons) >= 3:
+            candidates.append(cons[:3])
+
+    seen: set[str] = set()
+    for raw in candidates:
+        pref = _normalize_face_prefix(raw)
+        if pref in seen:
+            continue
+        seen.add(pref)
+        if pref not in _FACE_PREFIX_BLOCKLIST:
+            return pref
+
+    # Last resort: never emit a blocked prefix
+    base = _normalize_face_prefix(letters or "xxx")
+    if base not in _FACE_PREFIX_BLOCKLIST:
+        return base
+    return "x" + base[:2]
 
 
 def mint_office_ven_code(

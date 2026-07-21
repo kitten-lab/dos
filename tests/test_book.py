@@ -214,6 +214,33 @@ class PageLineUnitTests(unittest.TestCase):
         self.assertTrue(all(len(s) <= 10 for s in segs))
         self.assertEqual(" ".join(segs).replace("  ", " "), "one two three four")
 
+    def test_wrap_does_not_split_markdown_links(self) -> None:
+        """Book hang-wrap must keep [label](https://…) intact for Studio render."""
+        link = "[docs](https://example.com/very/long/path/to/resource)"
+        prose = f"See {link} for more about the office tools and calendars."
+        segs = wrap_text_hanging(prose, 28)
+        joined = " ".join(segs)
+        self.assertIn(link, joined)
+        # No segment should contain only a partial link (half the markdown)
+        for seg in segs:
+            if "http" in seg or "](" in seg or seg.startswith("["):
+                self.assertIn(link, seg, msg=segs)
+
+    def test_numbered_studio_keeps_links_after_wrap(self) -> None:
+        from dos.book import format_numbered_lines
+
+        body = (
+            ".format: studio\n"
+            "Read [Handbook](https://example.com/office/handbook/full-guide) "
+            "before onboarding."
+        )
+        view = format_numbered_lines(body, view_width=40)
+        # Rendered click action (not broken source)
+        self.assertIn("app.open_url", view)
+        self.assertIn("Handbook", view)
+        # Unrendered mid-break would leave raw "](https" fragments
+        self.assertNotIn("](https", view)
+
     def test_format_page_view_layout(self) -> None:
         view = format_page_view(
             book_name="Notes",

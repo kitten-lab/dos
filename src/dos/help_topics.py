@@ -39,7 +39,21 @@ _TOPIC_ALIASES: dict[str, tuple[str, ...]] = {
     "history": ("history", "hist"),
     "retime": ("retime", "retimes", "when-set"),
     "put": ("put", "install"),
-    "despawn": ("despawn", "lose", "reclaim", "lost"),
+    "despawn": (
+        "despawn",
+        "lose",
+        "reclaim",
+        "lost",
+        "dump",
+        "empty",
+        "offduty",
+        "onduty",
+        "off-duty",
+        "clockout",
+        "clockin",
+    ),
+    "destroy": ("destroy", "shred"),
+    "nuke": ("nuke", "purge"),
     "elevate": ("elevate",),
     "vens": ("vens", "ven", "export", "collector"),
     "lineage": ("lineage", "ancestry"),
@@ -136,7 +150,9 @@ _HELP_INDEX_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
             ("instances", "List all copies of a prime VEN"),
             ("history", "Story when @N / @unknown · life of item"),
             ("retime", "Fix story when on an HST event (all legs)"),
-            ("despawn", "Lose instance to Lost Dept · reclaim · lost"),
+            ("despawn", "Lost Dept (things) · Off Duty (people) · reclaim · onduty"),
+            ("destroy", "Hard-delete a TDF ticket slip · undo restores"),
+            ("nuke", "Erase whole VEN prime + instances · type confirmed"),
             ("elevate", "Instance → new prime (rebind + parent lineage)"),
         ],
     ),
@@ -553,7 +569,7 @@ def _init_topics() -> None:
             fmt.example_line("inv deep", "Same"),
             fmt.example_line("inventory"),
             fmt.example_line("i"),
-            fmt.hint("Same columns as look: prime · name · code."),
+            fmt.hint("Same columns as look: name · subtype · prime · code."),
         ),
         "take": _page(
             "take",
@@ -1524,21 +1540,77 @@ def _init_topics() -> None:
         "despawn": _page(
             "despawn",
             _p(
-                "Soft-remove an instance: it is not deleted. It is shelved in the mythic "
-                "place Lost Dept (auto-created). Lore, folios, and short-refs travel with it. "
-                "Reclaim later into inventory. Prefer this over destroying data."
+                "Soft-remove an instance — not deleted. "
+                "Things go to mythic Lost Dept; people go to Off Duty "
+                "(staff break room). Lore and short-refs travel with them. "
+                "Prefer this over destroying data. "
+                "For test setups: dump empties inventory or a whole bin in one go "
+                "(shallow — nested stuff rides inside a dumped bin)."
             ),
             fmt.section("Usage"),
-            fmt.example_line("despawn video game", "From inv or floor → Lost Dept"),
-            fmt.example_line("lose silver", "Alias for despawn"),
-            fmt.example_line("lost", "List what is shelved in Lost Dept"),
-            fmt.example_line("reclaim video game", "Pull from Lost Dept into inventory"),
-            fmt.example_line("unlose silver", "Alias for reclaim"),
-            fmt.hint("undo reverses the last despawn or reclaim"),
-            fmt.hint(
-                "Cannot lose places, the player, or realm/timeline layers. "
-                "No hard-delete of instances."
+            fmt.example_line("despawn video game", "Thing → Lost Dept"),
+            fmt.example_line("despawn Operator", "Person → Off Duty"),
+            fmt.example_line("offduty Operator", "Same for people"),
+            fmt.example_line("clockout Operator", "Alias"),
+            fmt.example_line("lose silver", "Alias for despawn (things)"),
+            fmt.example_line("dump", "Lose everything you are carrying"),
+            fmt.example_line(
+                "dump from bucket",
+                "Empty a bin’s direct contents → Lost Dept",
             ),
+            fmt.example_line("lost", "List Lost Dept"),
+            fmt.example_line("off-duty", "List staff who clocked out"),
+            fmt.example_line("reclaim video game", "Lost Dept → inventory"),
+            fmt.example_line("onduty Operator", "Off Duty → here (floor)"),
+            fmt.example_line("clockin Operator", "Alias for onduty"),
+            fmt.hint("undo reverses the last despawn, offduty, reclaim, or onduty"),
+            fmt.hint(
+                "Cannot lose places, yourself (the player), or realm/timeline layers. "
+                "Tickets: destroy ticket for hard-delete."
+            ),
+        ),
+        "destroy": _page(
+            "destroy",
+            _p(
+                "Hard-delete a Temporary Data Fragment (printed ticket slip). "
+                "Unlike despawn, it does not go to Lost Dept — the instance is removed. "
+                "A snapshot is kept on the undo stack so undo can restore the slip."
+            ),
+            fmt.section("Usage"),
+            fmt.example_line(
+                "destroy ticket Global Release",
+                "By title (reachable or TDF resolve)",
+            ),
+            fmt.example_line("destroy ticket TDF-48291037", "By TDF code"),
+            fmt.example_line("shred ticket Ship Window", "Alias for destroy"),
+            fmt.example_line("destroy tdf TDF-…", "Same family"),
+            fmt.hint("Only TDF slips — not ordinary things (use despawn for those)"),
+            fmt.hint("undo restores the destroyed ticket"),
+        ),
+        "nuke": _page(
+            "nuke",
+            _p(
+                "Formal hard-delete of an entire prime VEN and every instance of it. "
+                "Not soft-shelve — not Lost Dept, not Off Duty, not undoable. "
+                "You must type the word confirmed. Without it, DOS only arms the "
+                "charge and shows what would be erased."
+            ),
+            fmt.section("Usage"),
+            fmt.example_line(
+                "nuke Assigned Leads",
+                "Arm only — prints count + exact confirm line",
+            ),
+            fmt.example_line(
+                "nuke assigned-leads confirmed",
+                "Detonate: prime + all instances gone",
+            ),
+            fmt.example_line("purge ven Desk Lamp confirmed", "Alias"),
+            fmt.example_line("nuke prime com-7f3a2c confirmed", "By face code"),
+            fmt.hint(
+                "Blocked if you are that person, stand in that place, "
+                "or it is Lost Dept / Off Duty."
+            ),
+            fmt.hint("Child primes (lineage) stay; parent link is cleared."),
         ),
         "elevate": _page(
             "elevate",

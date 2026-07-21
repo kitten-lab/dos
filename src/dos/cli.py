@@ -493,11 +493,112 @@ def run_textual(world: World, world_path: Path) -> None:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
     from textual.containers import Horizontal, Vertical, VerticalScroll
+    from textual.selection import Selection
     from textual.widgets import Footer, Input, RichLog, Static
 
     from .book_ui import make_book_reader_screen
     from .wiki_ui import make_wiki_reader_screen
     from .history import CommandHistory
+
+    class SelectableWorldLog(RichLog):
+        """World log with real mouse text selection + copy.
+
+        Stock RichLog is almost selectable, but two gaps make drag feel
+        like “the whole window lights up”:
+
+        1. It never stamps ``offset`` meta on painted segments (plain
+           ``Log`` does via ``Strip.apply_offsets``), so the compositor
+           cannot resolve a content caret → Textual falls back to
+           SELECT_ALL over large widget ranges.
+        2. It never paints ``screen--selection`` on the chosen span.
+
+        We mirror Log for those two pieces and export plain text for copy
+        (same fix as miwbs).
+        """
+
+        ALLOW_SELECT = True
+
+        @staticmethod
+        def _stylize_char_range(strip, start: int, end: int, style) -> object:
+            """Apply a Rich style to a character range inside a Strip."""
+            from rich.segment import Segment
+            from textual.strip import Strip
+
+            if end < 0:
+                end = sum(len(seg.text) for seg in strip)
+            if start >= end:
+                return strip
+            out: list = []
+            pos = 0
+            for segment in strip:
+                text, seg_style, control = segment
+                n = len(text)
+                if n == 0:
+                    out.append(segment)
+                    continue
+                seg_start, seg_end = pos, pos + n
+                if seg_end <= start or seg_start >= end:
+                    out.append(segment)
+                else:
+                    if seg_start < start:
+                        cut = start - seg_start
+                        out.append(Segment(text[:cut], seg_style, control))
+                        text = text[cut:]
+                        seg_start = start
+                    if text and seg_start < end:
+                        cut = min(len(text), end - seg_start)
+                        mid_style = style if seg_style is None else seg_style + style
+                        out.append(Segment(text[:cut], mid_style, control))
+                        text = text[cut:]
+                    if text:
+                        out.append(Segment(text, seg_style, control))
+                pos = seg_end
+            return Strip(out, strip.cell_length)
+
+        def get_selection(self, selection: Selection) -> tuple[str, str] | None:
+            if not self.lines:
+                return None
+            text = "\n".join(strip.text for strip in self.lines)
+            if not text:
+                return None
+            return selection.extract(text), "\n"
+
+        def selection_updated(self, selection: Selection | None) -> None:
+            try:
+                self._line_cache.clear()
+            except Exception:  # noqa: BLE001
+                pass
+            self.refresh()
+
+        def render_line(self, y: int):
+            """Like RichLog, but with selection offsets + highlight (see Log)."""
+            from rich.style import Style as RichStyle
+            from textual.strip import Strip
+
+            scroll_x, scroll_y = self.scroll_offset
+            content_y = scroll_y + y
+            width = self.scrollable_content_region.width
+            rich_style = self.rich_style
+            if content_y >= len(self.lines):
+                return Strip.blank(width, rich_style)
+            line = self.lines[content_y]
+            selection = self.text_selection
+            if selection is not None:
+                span = selection.get_span(content_y)
+                if span is not None:
+                    start, end = span
+                    if end < 0:
+                        end = len(line.text)
+                    try:
+                        sel_style = self.screen.get_component_rich_style(
+                            "screen--selection"
+                        )
+                    except Exception:  # noqa: BLE001
+                        sel_style = RichStyle(reverse=True)
+                    line = self._stylize_char_range(line, start, end, sel_style)
+            line = line.crop_extend(scroll_x, scroll_x + width, rich_style)
+            line = line.apply_offsets(scroll_x, content_y)
+            return line.apply_style(rich_style)
 
     class HistoryInput(Input):
         """Input with ↑ / ↓ command history."""
@@ -635,7 +736,8 @@ def run_textual(world: World, world_path: Path) -> None:
         }}
         """
         BINDINGS = [
-            Binding("ctrl+c", "quit", "Quit"),
+            Binding("ctrl+c", "copy_or_quit", "Copy / Quit", show=False),
+            Binding("ctrl+q", "quit", "Quit", show=True),
             Binding("f1", "toggle_help", "Help"),
         ]
 
@@ -646,13 +748,22 @@ def run_textual(world: World, world_path: Path) -> None:
             self._open_book_id: str | None = None
             self._open_wiki: tuple[str, bool] | None = None
 
+        def action_copy_or_quit(self) -> None:
+            """Ctrl+C: copy highlighted log text if any, else leave the studio."""
+            selected = self.screen.get_selected_text()
+            if selected:
+                self.copy_to_clipboard(selected)
+                self.notify("Copied.", severity="information", timeout=1.5)
+                return
+            self.exit()
+
         def compose(self) -> ComposeResult:
             with Horizontal(id="studio-header"):
                 yield Static("", id="header-left", markup=True)
                 yield Static("", id="header-center", markup=True)
                 yield Static("", id="header-right", markup=True)
             with Horizontal(id="body"):
-                yield RichLog(
+                yield SelectableWorldLog(
                     id="log",
                     highlight=False,
                     markup=True,
@@ -682,7 +793,7 @@ def run_textual(world: World, world_path: Path) -> None:
             self.sub_title = ""
             self._refresh_studio_header()
             self._refresh_help_pane()
-            log = self.query_one("#log", RichLog)
+            log = self.query_one("#log", SelectableWorldLog)
             log.write(_studio_boot_banner_markup(world_path, name))
             r = dispatch(world, "look")
             if r.message:
@@ -796,14 +907,14 @@ def run_textual(world: World, world_path: Path) -> None:
             if route.refresh_help:
                 self._refresh_help_pane()
 
-        def _clear_world_log(self, log: RichLog) -> None:
+        def _clear_world_log(self, log: SelectableWorldLog) -> None:
             """Wipe transcript only — no tips banner (clr wants a blank log)."""
             log.clear()
             self._turn = 0
 
         def _write_world_turn(
             self,
-            log: RichLog,
+            log: SelectableWorldLog,
             line: str,
             message: str | None,
             *,
@@ -829,7 +940,7 @@ def run_textual(world: World, world_path: Path) -> None:
             self._refresh_studio_header()
 
         def on_input_submitted(self, event: Input.Submitted) -> None:
-            log = self.query_one("#log", RichLog)
+            log = self.query_one("#log", SelectableWorldLog)
             cmd = self.query_one("#cmd", HistoryInput)
             line = event.value.strip()
             event.input.value = ""
